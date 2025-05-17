@@ -1,0 +1,52 @@
+# defines metadata about this hewg project
+# that is, what minimum version of hewg should this run on
+[hewg]
+version = { 0 0 0 }
+type    = "executable"
+
+[project]
+version     = { 0 0 0 }
+name        = "testProject"
+description = "compiler build system and management software"
+authors     = { "crow" }
+
+# what flags to pass to each build tool
+# bare flags is generic, passed to each build type
+[flags]
+cxx = { "-Wextra" "-Werror" "-std=c++23" }
+c   = { "-Wextra" "-Werror" "-std=c20" }
+ld  = { "-Wl,--use-linker=mold" }
+
+# flags specific to linux, added to generic flags
+[flags.linux]
+
+# flags specific to mingw32, added to generic flags
+[flags.mingw]
+
+# what libraries to attempt to pull in
+[libraries]
+private = { "scl" }
+
+# what source files to compile,
+# and which header files to install/distribute
+[files]
+source = 
+  {
+    "main.cc"
+    "another.cc"
+    "another1.cc"
+    "another2.cc"
+    "another3.cc"
+    "another4.cc"
+  }
+
+public = 
+  {
+
+  }
+
+# files specific to linux to be added to generic files
+[files.linux]
+
+# files specific to mingw32 to be added to generic files
+[files.mingw]
