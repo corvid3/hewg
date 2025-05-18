@@ -9,6 +9,7 @@
 #include "paths.hh"
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 enum class FileType
@@ -41,29 +42,8 @@ depfile_for(std::filesystem::path in);
 std::vector<std::filesystem::path>
 get_files_by_type(std::span<std::filesystem::path const> source_files,
                   FileType);
-
-unsigned
+std::optional<unsigned>
 get_modification_date_of_file(std::filesystem::path const p);
-
-// accessor structure for getting the cached'
-// modification dates of files
-class ModificationDateAccessor
-{
-  class impl;
-  static std::unique_ptr<impl> m_impl;
-
-  std::scoped_lock<std::mutex> m_lock;
-
-public:
-  ModificationDateAccessor();
-  ~ModificationDateAccessor();
-
-  void update_cached_modification_date_for(std::filesystem::path,
-                                           unsigned timestamp);
-
-  std::optional<unsigned> get_cached_modification_date_for(
-    std::filesystem::path);
-};
 
 std::vector<std::filesystem::path>
 get_cxx_files_to_rebuild(std::span<std::filesystem::path const> source_files);

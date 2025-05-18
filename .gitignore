@@ -4,5 +4,8 @@
 *.so
 *.dll
 *.a
+*.d
 
 bin/*
+test/testProject
+test/.hcache

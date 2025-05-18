@@ -1,6 +1,7 @@
 #include "analysis.hh"
 #include "common.hh"
 #include "confs.hh"
+#include "depfile.hh"
 #include "paths.hh"
 #include <filesystem>
 #include <format>
@@ -108,130 +109,62 @@ get_files_by_type(std::span<std::filesystem::path const> files,
   return selected;
 }
 
-unsigned
+std::optional<unsigned>
 get_modification_date_of_file(std::filesystem::path const p)
 {
+  if (not std::filesystem::exists(p))
+    return std::nullopt;
+
   struct stat attr;
   stat(p.c_str(), &attr);
   return attr.st_mtime;
 }
 
-class ModificationDateAccessor::impl
+std::vector<Depfile>
+get_dependencies(std::span<std::filesystem::path const> source_files)
 {
-  // defer access from disk
-  std::optional<jayson::val> mod_file;
+  std::vector<Depfile> files;
 
-public:
-  std::mutex mutex;
-
-  jayson::obj& get_file()
-  {
-    if (not mod_file) {
-      // touch the date cache file
-      if (not std::filesystem::exists(hewg_modification_date_cache_path))
-        std::ofstream(hewg_modification_date_cache_path) << "{}";
-
-      mod_file =
-        jayson::val::parse(read_file(hewg_modification_date_cache_path));
-    }
-
-    return mod_file->as_else_throw<jayson::obj>(
-      "mod file isn't a json object?");
+  for (auto const& source_file : source_files) {
+    auto const depfile_path = depfile_for(source_file);
+    files.push_back(parse_depfile(depfile_path));
   }
 
-  ~impl()
-  {
-    if (mod_file)
-      std::ofstream(hewg_modification_date_cache_path) << mod_file->serialize();
-  }
+  return files;
 };
-
-std::unique_ptr<ModificationDateAccessor::impl>
-  ModificationDateAccessor::m_impl{ new impl() };
-
-ModificationDateAccessor::ModificationDateAccessor()
-  : m_lock(m_impl->mutex)
-{
-}
-
-ModificationDateAccessor::~ModificationDateAccessor() = default;
-
-void
-ModificationDateAccessor::update_cached_modification_date_for(
-  std::filesystem::path const path,
-  unsigned const timestamp)
-{
-  auto& file = m_impl->get_file();
-
-  auto const full_path = std::filesystem::absolute(path).string();
-
-  std::string const timestamp_str = std::to_string(timestamp);
-
-  file.insert_or_assign(path.string(), timestamp_str);
-}
-
-std::optional<unsigned>
-ModificationDateAccessor::get_cached_modification_date_for(
-  std::filesystem::path const path)
-{
-  auto& file = m_impl->get_file();
-
-  auto const full_path = std::filesystem::absolute(path).string();
-
-  if (not file.contains(full_path))
-    return std::nullopt;
-
-  auto const timestamp_str = file.at(full_path).as_else_throw<std::string>(
-    "timestamp in modification date cache file isn't a string?");
-
-  unsigned timestamp;
-  std::from_chars(&*timestamp_str.begin(), &*timestamp_str.end(), timestamp);
-
-  return timestamp;
-}
-
-std::vector<std::filesystem::path>
-get_files_newer_than_cached_mod_date(
-  std::span<std::filesystem::path const> source_files)
-{
-  ModificationDateAccessor accessor;
-
-  std::vector<std::filesystem::path> rebuild;
-
-  for (auto const& source : source_files) {
-    auto const cached_mod_date =
-      accessor.get_cached_modification_date_for(source);
-
-    if (not cached_mod_date)
-      rebuild.push_back(source);
-    else if (cached_mod_date < get_modification_date_of_file(source))
-      rebuild.push_back(source);
-  }
-
-  return rebuild;
-}
-
-// std::vector<DepNode>
-// get_dependencies(std::span<std::filesystem::path const> source_files)
-// {
-//   for (auto const& source_file : source_files) {
-//     auto const depfile = depfile_for(source_file);
-//   }
-// };
 
 std::vector<std::filesystem::path>
 get_cxx_files_to_rebuild(std::span<std::filesystem::path const> files)
 {
   auto const cxx_source_files = get_files_by_type(files, FileType::CXXSource);
 
-  // auto const get_all_deps = get_dependency_tree();
+  // auto const deps = get_dependencies(cxx_source_files);
 
-  auto const rebuild_by_mod_date =
-    get_files_newer_than_cached_mod_date(cxx_source_files);
+  // for (auto const& dep : deps) {
+  //   std::string msg;
+  //   msg.append(std::format("DEP {}\n", dep.path.string()));
+  //   for (auto const& d : dep.dependencies)
+  //     msg.append(std::format("  {}\n", d.string()));
+  //   threadsafe_print(msg, '\n');
+  // }
 
   // TODO: implement dependency retriggers,
   // that is for every cxx file that depends on another/header file,
   // retrigger
 
-  return rebuild_by_mod_date;
+  std::vector<std::filesystem::path> rebuilds;
+
+  for (auto const& sf : cxx_source_files) {
+    auto const obj = object_file_for(sf);
+
+    auto const obj_md = get_modification_date_of_file(obj);
+    auto const sf_md = *get_modification_date_of_file(sf);
+
+    if (!obj_md)
+      rebuilds.push_back(sf);
+    else if (sf_md >= *obj_md)
+      rebuilds.push_back(sf);
+  }
+
+  return rebuilds;
 }

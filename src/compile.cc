@@ -41,10 +41,6 @@ start_cxx_compile_task(ThreadPool& thread_pool,
       // and get rid of all future compile tasks
       successful_compile = false;
       thread_pool.drain();
-    } else {
-      // only update mod date if compilation was successful
-      ModificationDateAccessor().update_cached_modification_date_for(
-        file, get_modification_date_of_file(file));
     }
   });
 }
