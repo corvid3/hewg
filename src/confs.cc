@@ -73,5 +73,7 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
       conf.files.source.end(), append.source.begin(), append.source.end());
   }
 
+  scl::deserialize(conf.libs, file, "libraries");
+
   return conf;
 }

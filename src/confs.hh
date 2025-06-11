@@ -81,11 +81,20 @@ struct ToolsConf
                           scl::field<&ToolsConf::ld_tool, "ld">>;
 };
 
+struct LibraryConf
+{
+  std::vector<std::string> privates = {};
+
+  using scl_fields =
+    scl::field_descriptor<scl::field<&LibraryConf::privates, "private", true>>;
+};
+
 struct ConfigurationFile
 {
   MetaConf meta;
   ProjectConf project;
   ToolsConf tools;
+  LibraryConf libs;
   FlagsConf flags;
   FilesConf files;
 };

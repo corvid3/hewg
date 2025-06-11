@@ -10,3 +10,5 @@ local_todo
 bin/*
 test/testProject
 test/.hcache
+.hcache
+target

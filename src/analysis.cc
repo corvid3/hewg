@@ -129,6 +129,10 @@ get_dependencies(std::span<std::filesystem::path const> source_files)
 
   for (auto const& source_file : source_files) {
     auto const depfile_path = depfile_for(source_file);
+
+    if (not std::filesystem::exists(depfile_path))
+      continue;
+
     files.push_back(parse_depfile(depfile_path));
   }
 
@@ -146,7 +150,20 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
     cxx_source_files, c_source_files, std::inserter(collect, collect.end()));
 
   std::vector<std::filesystem::path> rebuilds;
-  auto const depfiles = get_dependencies(collect);
+  std::vector<Depfile> const depfiles = get_dependencies(collect);
+
+  // lazily find
+  // those files which don't have a depfile (thus uncompiled)
+  // yes this sucks. i fix it later
+  for (auto const& file : collect) {
+    for (auto const& df : depfiles)
+      if (std::filesystem::absolute(file) ==
+          std::filesystem::absolute(df.src_path))
+        goto after;
+
+    rebuilds.push_back(file);
+  after:;
+  }
 
   for (auto const& depfile : depfiles) {
     auto const obj_md = get_modification_date_of_file(depfile.obj_path);

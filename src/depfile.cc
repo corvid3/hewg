@@ -3,6 +3,7 @@
 #include "paths.hh"
 
 #include <lexible.hh>
+#include <optional>
 
 enum class TokenType
 {
@@ -11,42 +12,64 @@ enum class TokenType
   Skip,
   Identifier,
   Colon,
+  Backslash,
 };
 
 constexpr std::string_view skip_regex = R"(\s+)";
 
 // parser doesn't need to be very robust,
 // we verify the filepaths are ok afterwards
-constexpr std::string_view identifier_regex = R"(([a-zA-Z0-9\.\/]|\\ )+)";
+constexpr std::string_view identifier_regex = R"(([a-zA-Z0-9_\.\/]|\\ )+)";
 constexpr std::string_view colon_regex = ":";
+constexpr std::string_view backslash_regex = R"(\\)";
 
 using skip_morpheme = lexible::morpheme<skip_regex, TokenType::Skip, 0>;
 using identifier_morpheme =
   lexible::morpheme<identifier_regex, TokenType::Identifier, 1>;
 using colon_morpheme = lexible::morpheme<colon_regex, TokenType::Colon, 1>;
+using backslash_morpheme =
+  lexible::morpheme<backslash_regex, TokenType::Backslash, 2>;
 
-using lexer =
-  lexible::lexer<TokenType, skip_morpheme, identifier_morpheme, colon_morpheme>;
+using lexer = lexible::lexer<TokenType,
+                             skip_morpheme,
+                             identifier_morpheme,
+                             colon_morpheme,
+                             backslash_morpheme>;
 
 struct State
 {};
 
 using pctx = lexible::ParsingContext<lexer::token, State>;
 
-struct Dependencies
-  : pctx::Repeat<pctx::MorphemeParser<TokenType::Identifier,
-                                      "expected filepath when parsing depfile">,
-                 true>
+struct Depany
+  : pctx::Any<pctx::MorphemeParser<TokenType::Identifier,
+                                   "expected filepath when parsing depfile">,
+              pctx::MorphemeParser<TokenType::Backslash, "expected backslash">>
 {
-  std::vector<std::filesystem::path> operator()(
-    State&,
-    std::span<std::string_view const> in)
+  std::optional<std::filesystem::path> operator()(State&,
+                                                  std::string_view what,
+                                                  pctx::placeholder_t<0>)
+  {
+    return what;
+  }
+
+  std::optional<std::filesystem::path> operator()(State&,
+                                                  std::string_view,
+                                                  pctx::placeholder_t<1>)
+  {
+    return std::nullopt;
+  }
+};
+
+struct Dependencies : pctx::Repeat<Depany, true>
+{
+  auto operator()(State&,
+                  std::span<std::optional<std::filesystem::path>> in) const
   {
     std::vector<std::filesystem::path> out;
-    std::ranges::transform(
-      in, std::inserter(out, out.end()), [](std::string_view w) {
-        return std::filesystem::path(w);
-      });
+    for (auto const& x : in)
+      if (x)
+        out.push_back(*x);
     return out;
   }
 };

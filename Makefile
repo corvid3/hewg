@@ -47,7 +47,7 @@ else
 CXXFLAGS+=-O0 -g
 endif
 
-LDLIBS=-lscl -lanhinga
+LDLIBS=-lscl
 LDFLAGS=
 
 SRCS=src/main.cc src/confs.cc src/compile.cc src/analysis.cc src/thread_pool.cc src/depfile.cc src/cmdline.cc

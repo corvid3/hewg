@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 #include <functional>
+#include <latch>
 #include <mutex>
 #include <queue>
 #include <ranges>
@@ -19,10 +20,9 @@ class ThreadPool
   std::vector<std::thread> m_threads;
 
   std::condition_variable m_queueCondition;
-  std::condition_variable m_finishedCondition;
-  std::atomic<int> m_workingThreads;
   std::mutex m_mutex;
   std::queue<task_t> m_tasks;
+  std::queue<std::latch> m_taskLatches;
   bool m_closing = false;
 
 public:

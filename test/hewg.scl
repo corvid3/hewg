@@ -40,20 +40,18 @@ private = { "scl" }
 # what source files to compile,
 # and which header files to install/distribute
 [files]
-source = 
-  {
+source = {
     "main.cc"
     "another.cc"
     "another1.cc"
     "another2.cc"
     "another3.cc"
     "another4.cc"
-  }
+}
 
-public = 
-  {
+cxx_public = {
 
-  }
+}
 
 # files specific to linux to be added to generic files
 [files.linux]

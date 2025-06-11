@@ -1,5 +1,6 @@
 #include "common.hh"
 #include "thread_pool.hh"
+#include <mutex>
 #include <sys/wait.h>
 
 // thread_local int thread_id = MAIN_THREAD_ID;
@@ -31,14 +32,7 @@ ThreadPool::ThreadPool(int const num_threads)
           m_tasks.pop();
         }
 
-        m_workingThreads += 1;
-
         task();
-
-        // fetch_sub is fetch-set,
-        // so if it returns 1 its now 0
-        if (m_workingThreads.fetch_sub(1) == 1)
-          m_finishedCondition.notify_one();
       }
     } catch (std::exception const& e) {
       threadsafe_print(e.what(), '\n');
@@ -71,27 +65,28 @@ ThreadPool::drain()
 void
 ThreadPool::block_until_finished()
 {
-  // this is all in a loop,
-  // and the convar is wait_for because theres
-  // a chance that a deadlock can happen
-  // if a thread pushes in new work and finished between
-  // the first m_tasks empty check
-  // and the condition variable wait_for
+  auto get_next_latch = [&]() -> std::latch& {
+    std::scoped_lock lock(this->m_mutex);
+    return this->m_taskLatches.front();
+  };
+
+  auto pop_latch = [&]() -> bool {
+    std::scoped_lock lock(this->m_mutex);
+    this->m_taskLatches.pop();
+    return this->m_taskLatches.empty();
+  };
+
+  {
+    std::scoped_lock lock(this->m_mutex);
+    if (this->m_taskLatches.empty())
+      return;
+  }
+
   for (;;) {
-    // if the task queue is already empty,
-    // just quit
-    {
-      std::scoped_lock lock(m_mutex);
-      if (m_tasks.empty())
-        return;
-    }
-
-    std::unique_lock lock(m_mutex);
-
-    // wait until finishedCondition gets triggered
-    // and tasks is empty
-    m_finishedCondition.wait_for(
-      lock, std::chrono::seconds(1), [this] { return m_tasks.empty(); });
+    auto& latch = get_next_latch();
+    latch.wait();
+    if (pop_latch())
+      break;
   }
 }
 
@@ -100,7 +95,17 @@ ThreadPool::add_job(task_t func)
 {
   {
     std::scoped_lock lock(m_mutex);
-    m_tasks.push(func);
+
+    m_tasks.push([this, func]() {
+      auto add_latch = [this]() -> std::latch& {
+        std::scoped_lock lock(m_mutex);
+        return this->m_taskLatches.emplace(1);
+      };
+
+      auto& latch = add_latch();
+      func();
+      latch.count_down();
+    });
   }
 
   m_queueCondition.notify_one();
@@ -114,7 +119,8 @@ run_command(std::string const command, std::span<std::string> args)
   // use pipes to redirect stdout
   int fds[2];
 
-  pipe(fds);
+  if (pipe(fds) != 0)
+    throw std::runtime_error("error in pipe()");
 
   std::vector<std::string> args_owned(args.begin(), args.end());
   std::vector<char const*> args_owned_ptrs;

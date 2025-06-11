@@ -121,6 +121,9 @@ link(ConfigurationFile const& config,
   for (auto const& of : object_files)
     args.push_back(std::filesystem::relative(of).string());
 
+  for (auto const& lib : config.libs.privates)
+    args.push_back(std::format("-l{}", lib));
+
   run_command("c++", args);
 }
 
@@ -149,10 +152,14 @@ compile_c_cxx(ThreadPool& pool,
     throw std::runtime_error("fatal errors when compiling cxx source files");
 
   std::vector<std::filesystem::path> object_files;
-  auto&& c_objs = get_files_by_type(source_filepaths, FileType::CSource);
-  auto&& cxx_objs = get_files_by_type(source_filepaths, FileType::CXXSource);
+  auto c_objs = get_files_by_type(source_filepaths, FileType::CSource);
+  auto cxx_objs = get_files_by_type(source_filepaths, FileType::CXXSource);
+
+  std::ranges::transform(c_objs, c_objs.begin(), object_file_for);
+  std::ranges::transform(cxx_objs, cxx_objs.begin(), object_file_for);
 
   std::ranges::set_union(
     c_objs, cxx_objs, std::inserter(object_files, object_files.end()));
+
   return object_files;
 }

@@ -1,0 +1,26 @@
+[hewg]
+version = { 0 0 0 }
+type = "executable"
+
+[project]
+version = { 0 0 1 }
+name = "hewg"
+description = "compiler build system and management software"
+authors = {  }
+
+[flags]
+cxx = { "-Wextra" "-Werror" "-std=c++23" }
+
+[libraries]
+private = { "scl" }
+
+[files]
+source = {
+    "main.cc"
+    "confs.cc"
+    "compile.cc"
+    "analysis.cc"
+    "thread_pool.cc"
+    "depfile.cc"
+    "cmdline.cc"
+}

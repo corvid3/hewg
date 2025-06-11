@@ -158,19 +158,31 @@ clean(ThreadPool&,
                            c_filepaths,
                            std::inserter(c_cxx_sources, c_cxx_sources.end()));
 
+    std::vector<std::filesystem::path> objects;
+    std::vector<std::filesystem::path> depfiles;
+
     std::ranges::transform(
-      c_cxx_sources, c_cxx_sources.begin(), object_file_for);
+      c_cxx_sources, std::inserter(objects, objects.end()), object_file_for);
 
-    std::erase_if(c_cxx_sources, [](auto const& sf) {
-      return not std::filesystem::exists(sf);
-    });
+    std::ranges::transform(
+      c_cxx_sources, std::inserter(depfiles, depfiles.end()), depfile_for);
 
-    if (c_cxx_sources.empty())
+    std::erase_if(
+      objects, [](auto const& sf) { return not std::filesystem::exists(sf); });
+    std::erase_if(
+      depfiles, [](auto const& sf) { return not std::filesystem::exists(sf); });
+
+    if (objects.empty() and depfiles.empty())
       goto skip;
 
     to_clean.insert(to_clean.end(),
-                    std::make_move_iterator(c_cxx_sources.begin()),
-                    std::make_move_iterator(c_cxx_sources.end()));
+                    std::make_move_iterator(objects.begin()),
+                    std::make_move_iterator(objects.end()));
+
+    to_clean.insert(to_clean.end(),
+                    std::make_move_iterator(depfiles.begin()),
+                    std::make_move_iterator(depfiles.end()));
+
     cleaned_anything = true;
   skip:
   }
@@ -227,6 +239,8 @@ try {
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
     clean(thread_pool, config_path, options, bares);
+  } else {
+    throw std::runtime_error("init command not yet supported");
   }
 } catch (std::exception const& e) {
   threadsafe_print("ERROR: ", e.what(), '\n');
