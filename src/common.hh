@@ -1,6 +1,7 @@
 #pragma once
 
 #include "thread_pool.hh"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <concepts>
@@ -32,6 +33,14 @@ constexpr std::size_t
 operator""_mb(unsigned long long const in)
 {
   return in * 1024_kb;
+}
+
+template<typename L, std::convertible_to<L> R>
+void
+append_vec(std::vector<L>& into, std::vector<R>&& rhs)
+{
+  std::copy(rhs.begin(), rhs.end(), std::inserter(into, into.end()));
+  // lhs.insert(lhs.end(), rhs.begin(), rhs.end());
 }
 
 static inline std::mutex stdout_mutex;
@@ -90,6 +99,19 @@ threadsafe_print(auto const&... v)
   std::cout << s;
 }
 
+// this is set to true in main()
+// if the verbose flag was set
+static inline bool verbose_output = false;
+
+inline void
+threadsafe_print_verbose(auto const&... v)
+{
+  if (not verbose_output)
+    return;
+
+  threadsafe_print(v...);
+}
+
 inline std::string
 read_file(std::filesystem::path const p)
 {
@@ -112,9 +134,24 @@ is_subpathed_by(std::filesystem::path const owning_directory,
   // because it introduces a new empty component at the end...
   // hmm
 
-  return std::mismatch(owning_directory.begin(),
-                       owning_directory.end(),
-                       child.begin(),
-                       child.end())
-           .first == owning_directory.end();
+  auto const owning_directory_full =
+    std::filesystem::absolute(owning_directory);
+  auto const child_full = std::filesystem::absolute(child);
+
+  auto const m = std::mismatch(owning_directory_full.begin(),
+                               owning_directory_full.end(),
+                               child_full.begin(),
+                               child_full.end());
+
+  return m.first == owning_directory_full.end();
+}
+
+inline void
+create_directory_checked(std::filesystem::path const what)
+{
+  if (not std::filesystem::exists(what))
+    std::filesystem::create_directory(what);
+  if (not std::filesystem::is_directory(what))
+    throw std::runtime_error(std::format(
+      "{} must be a directory", std::filesystem::relative(what).string()));
 }

@@ -40,7 +40,8 @@ ThreadPool::ThreadPool(int const num_threads)
         if (m_workingThreads.fetch_sub(1) == 1)
           m_finishedCondition.notify_one();
       }
-    } catch (std::exception const&) {
+    } catch (std::exception const& e) {
+      threadsafe_print(e.what(), '\n');
       return;
     }
   };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <scl.hh>
 #include <string>
 #include <tuple>
@@ -52,9 +53,9 @@ struct FlagsConf
   std::vector<std::string> ld_flags;
 
   using scl_fields =
-    scl::field_descriptor<scl::field<&FlagsConf::cxx_flags, "cxx">,
-                          scl::field<&FlagsConf::c_flags, "c">,
-                          scl::field<&FlagsConf::ld_flags, "ld">>;
+    scl::field_descriptor<scl::field<&FlagsConf::cxx_flags, "cxx", false>,
+                          scl::field<&FlagsConf::c_flags, "c", false>,
+                          scl::field<&FlagsConf::ld_flags, "ld", false>>;
 };
 
 struct FilesConf
@@ -65,19 +66,32 @@ struct FilesConf
     scl::field_descriptor<scl::field<&FilesConf::source, "source">>;
 };
 
+struct ToolsConf
+{
+  // TODO: update libscl such that it just
+  // uses default field initializers, not
+  // default values in the scl::field lol
+  std::string cxx_tool = "c++";
+  std::string c_tool = "cc";
+  std::string ld_tool = "ld";
+
+  using scl_fields =
+    scl::field_descriptor<scl::field<&ToolsConf::cxx_tool, "cxx">,
+                          scl::field<&ToolsConf::c_tool, "c">,
+                          scl::field<&ToolsConf::ld_tool, "ld">>;
+};
+
 struct ConfigurationFile
 {
   MetaConf meta;
   ProjectConf project;
+  ToolsConf tools;
   FlagsConf flags;
   FilesConf files;
-
-  using scl_recurse =
-    scl::field_descriptor<scl::field<&ConfigurationFile::meta, "hewg">,
-                          scl::field<&ConfigurationFile::project, "project">,
-                          scl::field<&ConfigurationFile::flags, "flags">,
-                          scl::field<&ConfigurationFile::files, "files">>;
 };
 
 ConfigurationFile
-get_config_file();
+get_config_file(std::filesystem::path path, std::string_view build_profile);
+
+constexpr auto LINUX_BUILD_PROFILE = "linux";
+constexpr auto MINGW_BUILD_PROFILE = "mingw";

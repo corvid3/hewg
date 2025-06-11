@@ -31,7 +31,7 @@ using lexer =
 struct State
 {};
 
-using pctx = lexible::ParsingContext<lexer, State>;
+using pctx = lexible::ParsingContext<lexer::token, State>;
 
 struct Dependencies
   : pctx::Repeat<pctx::MorphemeParser<TokenType::Identifier,
@@ -69,8 +69,14 @@ struct DepfileParser
   {
     auto const& [lhs, _1, dependencies] = tup;
 
+    if (dependencies.size() < 1)
+      throw std::runtime_error("depfile has a corrupted dependency list, "
+                               "object file does not depend on source file");
+
     Depfile out;
-    out.path = std::filesystem::path(lhs);
+    out.obj_path = std::filesystem::path(lhs);
+    out.src_path = dependencies.front();
+
     for (auto i = ++dependencies.begin(); i != dependencies.end(); i++)
       out.dependencies.push_back(std::filesystem::path(*i));
 
@@ -88,7 +94,8 @@ parse_depfile(std::filesystem::path const path)
                              "into the dependency cache path");
 
   auto const contents = read_file(path);
-  auto const out = parser(contents).parse();
+  auto const toks = lexer(contents).consume_all();
+  auto const out = parser(std::move(toks)).parse();
 
   if (not out)
     throw std::runtime_error(

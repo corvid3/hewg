@@ -3,8 +3,10 @@
 #include "confs.hh"
 #include "depfile.hh"
 #include "paths.hh"
+#include <algorithm>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <jayson.hh>
 #include <list>
 #include <memory>
@@ -134,36 +136,36 @@ get_dependencies(std::span<std::filesystem::path const> source_files)
 };
 
 std::vector<std::filesystem::path>
-get_cxx_files_to_rebuild(std::span<std::filesystem::path const> files)
+mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
 {
-  auto const cxx_source_files = get_files_by_type(files, FileType::CXXSource);
+  auto&& cxx_source_files = get_files_by_type(files, FileType::CXXSource);
+  auto&& c_source_files = get_files_by_type(files, FileType::CSource);
 
-  // auto const deps = get_dependencies(cxx_source_files);
-
-  // for (auto const& dep : deps) {
-  //   std::string msg;
-  //   msg.append(std::format("DEP {}\n", dep.path.string()));
-  //   for (auto const& d : dep.dependencies)
-  //     msg.append(std::format("  {}\n", d.string()));
-  //   threadsafe_print(msg, '\n');
-  // }
-
-  // TODO: implement dependency retriggers,
-  // that is for every cxx file that depends on another/header file,
-  // retrigger
+  std::vector<std::filesystem::path> collect;
+  std::ranges::set_union(
+    cxx_source_files, c_source_files, std::inserter(collect, collect.end()));
 
   std::vector<std::filesystem::path> rebuilds;
+  auto const depfiles = get_dependencies(collect);
 
-  for (auto const& sf : cxx_source_files) {
-    auto const obj = object_file_for(sf);
+  for (auto const& depfile : depfiles) {
+    auto const obj_md = get_modification_date_of_file(depfile.obj_path);
 
-    auto const obj_md = get_modification_date_of_file(obj);
-    auto const sf_md = *get_modification_date_of_file(sf);
+    if (not obj_md) {
+      rebuilds.push_back(depfile.src_path);
+      continue;
+    }
 
-    if (!obj_md)
-      rebuilds.push_back(sf);
-    else if (sf_md >= *obj_md)
-      rebuilds.push_back(sf);
+    for (auto const& dep : depfile.dependencies) {
+      auto const dep_md = get_modification_date_of_file(dep);
+      if (not dep_md)
+        break;
+
+      if (*dep_md > obj_md) {
+        rebuilds.push_back(depfile.src_path);
+        break;
+      }
+    }
   }
 
   return rebuilds;

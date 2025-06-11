@@ -1,4 +1,6 @@
+#include <filesystem>
 #include <optional>
+#include <scl.hh>
 
 #include "common.hh"
 #include "confs.hh"
@@ -32,11 +34,44 @@ project_type_from_string(std::string_view s)
 }
 
 ConfigurationFile
-get_config_file()
+get_config_file(std::filesystem::path path, std::string_view build_profile)
 {
-  std::string config_filedata = read_file(hewg_config_path);
+  std::string config_filedata = read_file(path);
   scl::scl_file file(config_filedata);
+
+  auto const flags_bp = std::string("flags.").append(build_profile);
+  auto const files_bp = std::string("files.").append(build_profile);
+
   ConfigurationFile conf;
-  scl::deserialize(conf, file);
+
+  scl::deserialize(conf.meta, file, "hewg");
+  scl::deserialize(conf.project, file, "project");
+
+  scl::deserialize(conf.flags, file, "flags");
+  if (file.table_exists(flags_bp)) {
+    FlagsConf append;
+    scl::deserialize(append, file, flags_bp);
+
+    conf.flags.c_flags.insert(
+      conf.flags.c_flags.end(), append.c_flags.begin(), append.c_flags.end());
+
+    conf.flags.cxx_flags.insert(conf.flags.cxx_flags.end(),
+                                append.cxx_flags.begin(),
+                                append.cxx_flags.end());
+
+    conf.flags.ld_flags.insert(conf.flags.ld_flags.end(),
+                               append.ld_flags.begin(),
+                               append.ld_flags.end());
+  }
+
+  scl::deserialize(conf.files, file, "files");
+  if (file.table_exists(files_bp)) {
+    FilesConf append;
+    scl::deserialize(append, file, files_bp);
+
+    conf.files.source.insert(
+      conf.files.source.end(), append.source.begin(), append.source.end());
+  }
+
   return conf;
 }
