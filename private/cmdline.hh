@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <terse.hh>
 #include <thread>
 
@@ -41,6 +42,8 @@ struct ToplevelOptions : terse::NonterminalSubcommand
   unsigned num_tasks = std::thread::hardware_concurrency();
   std::optional<std::string> config_file_path;
 
+  bool print_version = false;
+
   using options = std::tuple<
     terse::Option<"verbose",
                   'v',
@@ -53,7 +56,11 @@ struct ToplevelOptions : terse::NonterminalSubcommand
     terse::Option<"config",
                   'c',
                   "sets the config file to read",
-                  &ToplevelOptions::config_file_path>>;
+                  &ToplevelOptions::config_file_path>,
+    terse::Option<"version",
+                  std::nullopt,
+                  "prints the version of hewg",
+                  &ToplevelOptions::print_version>>;
 
   using subcommands =
     std::tuple<BuildOptions, CleanOptions, InitOptions, InstallOptions>;

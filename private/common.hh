@@ -17,6 +17,8 @@
 
 using namespace std::string_view_literals;
 
+extern "C" int __hewg_version[3];
+
 template<typename T>
 class atomic_vec
 {

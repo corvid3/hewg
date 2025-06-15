@@ -10,6 +10,7 @@
 #include <exception>
 #include <filesystem>
 #include <iterator>
+#include <jayson.hh>
 
 // TODO: for every task i spawn, i also run get_common_flags,
 // i should only need to call it once and then just pass a ref to it
@@ -261,6 +262,48 @@ shared_link(ConfigurationFile const& config,
   run_command("c++", args);
 }
 
+static std::string
+emit_symcache_contents(version_triplet const trip)
+{
+  auto const [x, y, z] = trip;
+
+  return std::format("int __hewg_version[3] = {{ {}, {}, {} }};", x, y, z);
+}
+
+// returns true if requesting a rebuild of the builtin symbol file
+static bool
+check_symcache(ConfigurationFile const& config)
+{
+  if (not std::filesystem::exists(hewg_builtinsym_cache_path)) {
+    std::ofstream(hewg_builtinsym_cache_path)
+      << jayson::serialize(config.project.version).serialize();
+
+    std::ofstream(hewg_builtinsym_src_path)
+      << emit_symcache_contents(config.project.version);
+
+    return true;
+  } else {
+    std::stringstream ss;
+    ss << std::ifstream(hewg_builtinsym_cache_path).rdbuf();
+
+    jayson::val v = jayson::val::parse(std::move(ss).str());
+    version_triplet trip;
+    jayson::deserialize(v, trip);
+
+    // if the version has changed, request a rebuild
+    if (trip != config.project.version) {
+      std::ofstream(hewg_builtinsym_src_path)
+        << emit_symcache_contents(config.project.version);
+
+      std::ofstream(hewg_builtinsym_cache_path)
+        << jayson::serialize(config.project.version).serialize();
+
+      return true;
+    } else
+      return false;
+  }
+}
+
 std::vector<std::filesystem::path>
 compile_c_cxx(ThreadPool& pool,
               ConfigurationFile const& config,
@@ -271,6 +314,15 @@ compile_c_cxx(ThreadPool& pool,
 
   auto const cxx_rebuilds = get_files_by_type(rebuilds, FileType::CXXSource);
   auto const c_rebuilds = get_files_by_type(rebuilds, FileType::CSource);
+
+  if (check_symcache(config)) {
+    run_command("cc",
+                hewg_builtinsym_src_path.string(),
+                "-O2",
+                "-c",
+                "-o",
+                hewg_builtinsym_obj_path.string());
+  }
 
   atomic_vec<std::string> failed_compiles;
 
@@ -299,6 +351,8 @@ compile_c_cxx(ThreadPool& pool,
 
   std::ranges::set_union(
     c_objs, cxx_objs, std::inserter(object_files, object_files.end()));
+
+  object_files.push_back(hewg_builtinsym_obj_path);
 
   return object_files;
 }

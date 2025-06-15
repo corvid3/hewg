@@ -45,4 +45,6 @@ source = {
     "install.cc"
     "hooks.cc"
     "jayson.cc"
+
+    "bootstrap_version.c"
 }

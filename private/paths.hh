@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+
 auto static const hewg_config_path =
   std::filesystem::current_path() / "hewg.scl";
 
@@ -8,6 +9,10 @@ auto static const hewg_cache_path = std::filesystem::current_path() / ".hcache";
 
 auto const hewg_hook_path = std::filesystem::current_path() / "hooks";
 auto const hewg_hook_cache_path = hewg_cache_path / "hooks.json";
+
+auto const hewg_builtinsym_cache_path = hewg_cache_path / "hewgsyms.json";
+auto const hewg_builtinsym_src_path = hewg_cache_path / "hewgsyms.c";
+auto const hewg_builtinsym_obj_path = hewg_cache_path / "hewgsyms.o";
 
 auto static const hewg_object_cache_path = hewg_cache_path / "objects";
 auto static const hewg_dependency_cache_path = hewg_cache_path / "deps";

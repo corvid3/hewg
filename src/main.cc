@@ -312,7 +312,13 @@ try {
     std::format("using <{}> tasks\n", tl_options.num_tasks));
   ThreadPool thread_pool(tl_options.num_tasks);
 
-  // do some quick checks...
+  if (tl_options.print_version) {
+    version_triplet triplet;
+    triplet = { __hewg_version[0], __hewg_version[1], __hewg_version[2] };
+
+    threadsafe_print(
+      std::format("version <{}>\n", version_triplet_to_string(triplet)));
+  }
 
   if (std::holds_alternative<std::monostate>(scmds)) {
     // print usage here
