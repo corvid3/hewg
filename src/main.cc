@@ -26,6 +26,7 @@
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
+#include "install.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
 
@@ -317,6 +318,11 @@ try {
   } else if (std::holds_alternative<InitOptions>(scmds)) {
     auto options = std::get<InitOptions>(scmds);
     init(thread_pool, config_path, options, bares);
+  } else if (std::holds_alternative<InstallOptions>(scmds)) {
+    auto options = std::get<InstallOptions>(scmds);
+    auto const profile = get_build_profile(bares);
+    ConfigurationFile const config = get_config_file(config_path, profile);
+    install(config, options, profile);
   }
 } catch (std::exception const& e) {
   threadsafe_print("ERROR: ", e.what(), '\n');

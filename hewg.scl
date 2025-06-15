@@ -6,7 +6,7 @@ type = "executable"
 version = { 0 0 1 }
 name = "hewg"
 description = "compiler build system and management software"
-authors = {  }
+authors = { "crow" }
 
 [flags]
 cxx = { "-Wextra" "-Werror" "-std=c++23" }
@@ -35,4 +35,6 @@ source = {
     "depfile.cc"
     "cmdline.cc"
     "common.cc"
+    "install.cc"
+    "jayson.cc"
 }

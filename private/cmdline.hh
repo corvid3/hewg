@@ -15,6 +15,12 @@ struct InitOptions : terse::TerminalSubcommand
   using options = std::tuple<>;
 };
 
+struct InstallOptions : terse::TerminalSubcommand
+{
+  constexpr static auto name = terse::comptime_str("install");
+  using options = std::tuple<>;
+};
+
 struct BuildOptions : terse::TerminalSubcommand
 {
   constexpr static auto name = terse::comptime_str("build");
@@ -49,7 +55,8 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   "sets the config file to read",
                   &ToplevelOptions::config_file_path>>;
 
-  using subcommands = std::tuple<BuildOptions, CleanOptions, InitOptions>;
+  using subcommands =
+    std::tuple<BuildOptions, CleanOptions, InitOptions, InstallOptions>;
 };
 
 decltype(terse::execute<ToplevelOptions>({}, {}))
