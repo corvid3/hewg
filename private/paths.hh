@@ -6,6 +6,9 @@ auto static const hewg_config_path =
 
 auto static const hewg_cache_path = std::filesystem::current_path() / ".hcache";
 
+auto const hewg_hook_path = std::filesystem::current_path() / "hooks";
+auto const hewg_hook_cache_path = hewg_cache_path / "hooks.json";
+
 auto static const hewg_object_cache_path = hewg_cache_path / "objects";
 auto static const hewg_dependency_cache_path = hewg_cache_path / "deps";
 auto static const hewg_modification_date_cache_path =

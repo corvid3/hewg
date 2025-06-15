@@ -22,8 +22,15 @@ native = { "scl" }
 # name = "scl"
 # version = { 0 0 1 }
 
-[hooks]
-install = "install_setup.sh"
+# hooks that get called once,
+# unless the project gets cleaned
+[hooks.prebuild]
+# once = { "test.sh" }
+# always = { }
+
+[hooks.postbuild]
+# once = { }
+# always = { }
 
 [files]
 source = {
@@ -36,5 +43,6 @@ source = {
     "cmdline.cc"
     "common.cc"
     "install.cc"
+    "hooks.cc"
     "jayson.cc"
 }

@@ -26,6 +26,7 @@
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
+#include "hooks.hh"
 #include "install.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
@@ -118,6 +119,8 @@ build(ThreadPool& threads,
   ConfigurationFile const config = get_config_file(config_path, build_profile);
   check_filename_clashes(config);
 
+  trigger_prebuild_hooks(config);
+
   std::vector<std::filesystem::path> object_files;
 
   // just build
@@ -142,6 +145,8 @@ build(ThreadPool& threads,
       shared_link(config, build_opts, object_files, emit_dir);
       break;
   }
+
+  triggers_postbuild_hooks(config);
 }
 
 static void
@@ -162,6 +167,10 @@ clean(ThreadPool&,
   bool cleaned_anything = false;
 
   std::vector<std::filesystem::path> to_clean;
+
+  // make sure to nuke the hook cache
+  if (std::filesystem::exists(hewg_hook_cache_path))
+    to_clean.push_back(hewg_hook_cache_path);
 
   {
     auto const source_filepaths = get_source_filepaths(config);
@@ -269,7 +278,7 @@ init(ThreadPool&,
 
     config.files.source = { "main.cc" };
 
-    scl::scl_file file;
+    scl::file file;
     scl::serialize(config, file);
 
     std::ofstream("./hewg.scl") << file.serialize();

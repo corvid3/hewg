@@ -38,17 +38,17 @@ ConfigurationFile
 get_config_file(std::filesystem::path path, std::string_view build_profile)
 {
   std::string config_filedata = read_file(path);
-  scl::scl_file file(config_filedata);
+  scl::file file(config_filedata);
 
   auto const flags_bp = std::string("flags.").append(build_profile);
   auto const files_bp = std::string("files.").append(build_profile);
 
   ConfigurationFile conf;
+  scl::deserialize(conf, file);
 
-  scl::deserialize(conf.meta, file, "hewg");
-  scl::deserialize(conf.project, file, "project");
+  // now we do some jank where we append vectors
+  // depending on the build profile
 
-  scl::deserialize(conf.flags, file, "flags");
   if (file.table_exists(flags_bp)) {
     FlagsConf append;
     scl::deserialize(append, file, flags_bp);
@@ -65,7 +65,6 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
                                append.ld_flags.end());
   }
 
-  scl::deserialize(conf.files, file, "files");
   if (file.table_exists(files_bp)) {
     FilesConf append;
     scl::deserialize(append, file, files_bp);
@@ -73,8 +72,6 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
     conf.files.source.insert(
       conf.files.source.end(), append.source.begin(), append.source.end());
   }
-
-  scl::deserialize(conf.libs, file, "libraries");
 
   return conf;
 }

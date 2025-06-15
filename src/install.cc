@@ -163,7 +163,7 @@ install_executable(ConfigurationFile const& config,
   auto const info_path = install_dir / "info.scl";
 
   // we want just the meta & project information
-  scl::scl_file file;
+  scl::file file;
   scl::serialize(config.meta, file, "hewg");
   scl::serialize(config.project, file, "project");
 
