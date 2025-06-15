@@ -11,6 +11,9 @@
 #include <filesystem>
 #include <iterator>
 
+// TODO: for every task i spawn, i also run get_common_flags,
+// i should only need to call it once and then just pass a ref to it
+
 static auto
 get_common_c_cxx_flags(ConfigurationFile const& config,
                        std::filesystem::path const file,

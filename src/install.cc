@@ -2,6 +2,7 @@
 #include "confs.hh"
 #include "install.hh"
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <scl.hh>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 /*
@@ -143,6 +145,24 @@ select_executable(std::string_view name, version_triplet const trip)
   auto const package_dir =
     packages_directory / name / version_triplet_to_string(trip);
   auto const exec_path = package_dir / name;
+
+  if (std::filesystem::exists(bin_directory / name)) {
+    if (not std::filesystem::is_symlink(bin_directory / name))
+      throw std::runtime_error(
+        std::format("{} exists, but isn't a symlink??? try deleting it.",
+                    (bin_directory / name).string()));
+
+    threadsafe_print(
+      std::format("deleting symlink {}...\n", (bin_directory / name).string()));
+    threadsafe_print("3...\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    threadsafe_print("2...\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    threadsafe_print("1...\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::filesystem::remove(bin_directory / name);
+  }
 
   std::filesystem::create_symlink(exec_path, bin_directory / name);
 }
