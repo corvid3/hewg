@@ -11,6 +11,19 @@
 #include <sstream>
 #include <stdexcept>
 
+/*
+
+  since multiple versions of a binary
+  can be installed at once, it's a smart idea
+  to have a symlink to the binary in just a /bin
+  directory.
+
+  this also means there needs to be a way to select
+  and change the currently used version of the binary,
+  to swap out the symlink to point to another version
+
+*/
+
 struct VersionManifest
 {
   std::vector<std::tuple<int, int, int>> versions;

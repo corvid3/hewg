@@ -1,5 +1,5 @@
 [hewg]
-version = { 0 0 0 }
+version = { 0 0 1 }
 type = "executable"
 
 [project]
@@ -21,6 +21,9 @@ native = { "scl" }
 # [[package]]
 # name = "scl"
 # version = { 0 0 1 }
+
+[hooks]
+install = "install_setup.sh"
 
 [files]
 source = {
