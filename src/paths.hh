@@ -14,5 +14,8 @@ auto static const hewg_modification_date_cache_path =
 auto static const hewg_src_directory_path =
   std::filesystem::current_path() / "src";
 
+auto static const hewg_err_directory_path =
+  std::filesystem::current_path() / "err";
+
 auto static const hewg_target_directory_path =
   std::filesystem::current_path() / "target";

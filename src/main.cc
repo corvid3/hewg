@@ -9,6 +9,7 @@
 #include <jayson.hh>
 #include <optional>
 #include <ranges>
+#include <scl.hh>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -16,6 +17,7 @@
 #include <terse.hh>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -121,10 +123,24 @@ build(ThreadPool& threads,
   std::ranges::copy(compile_c_cxx(threads, config, build_opts),
                     std::inserter(object_files, object_files.end()));
 
-  // make sure the target directory exists
   create_directory_checked(hewg_target_directory_path);
   create_directory_checked(hewg_target_directory_path / build_profile);
-  link(config, object_files, hewg_target_directory_path / build_profile);
+
+  auto const emit_dir = hewg_target_directory_path / build_profile;
+
+  switch (config.meta.type) {
+    case ProjectType::Executable:
+      link(config, build_opts, object_files, emit_dir);
+      break;
+
+    case ProjectType::StaticLibrary:
+      pack_static_library(config, object_files, emit_dir);
+      break;
+
+    case ProjectType::SharedLibrary:
+      shared_link(config, build_opts, object_files, emit_dir);
+      break;
+  }
 }
 
 static void
@@ -206,6 +222,65 @@ clean(ThreadPool&,
     std::filesystem::remove(sf);
 }
 
+static void
+init(ThreadPool&,
+     std::string_view,
+     InitOptions const&,
+     std::span<std::string const> bares)
+{
+  auto const this_dir = std::filesystem::current_path();
+
+  if (not std::filesystem::is_empty(this_dir))
+    throw std::runtime_error(
+      "init command can only be ran on empty directories!");
+
+  std::filesystem::create_directory("src");
+  std::filesystem::create_directory("include");
+  std::filesystem::create_directory("private");
+
+  {
+    if (bares.size() != 2)
+      throw std::runtime_error(
+        "init command takes two bare arguments, the first must be the type of "
+        "the project and the second must be the name of the project");
+
+    auto const type = bares[0];
+    auto const name = bares[1];
+
+    auto const project_type = project_type_from_string(type)
+                                .or_else([&]() -> std::optional<ProjectType> {
+                                  throw std::runtime_error(std::format(
+                                    "unknown project type {}", type));
+                                  std::unreachable();
+                                })
+                                .value();
+
+    ConfigurationFile config;
+
+    config.meta.type = project_type;
+    config.meta.version = { 0, 0, 0 };
+
+    config.project.version = { 0, 0, 0 };
+    config.project.name = name;
+
+    config.flags.cxx_flags = { "-Wextra", "-Werror", "-std=c++23" };
+    config.flags.c_flags = { "-Wextra", "-Werror", "-std=c2y" };
+
+    config.files.source = { "main.cc" };
+
+    scl::scl_file file;
+    scl::serialize(config, file);
+
+    std::ofstream("./hewg.scl") << file.serialize();
+  }
+
+  std::ofstream("./src/main.cc") << R"(#include<iostream>
+
+int main() {
+  std::cout << "hello, world!";    
+})";
+}
+
 int
 main(int argc, char** argv)
 try {
@@ -239,8 +314,9 @@ try {
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
     clean(thread_pool, config_path, options, bares);
-  } else {
-    throw std::runtime_error("init command not yet supported");
+  } else if (std::holds_alternative<InitOptions>(scmds)) {
+    auto options = std::get<InitOptions>(scmds);
+    init(thread_pool, config_path, options, bares);
   }
 } catch (std::exception const& e) {
   threadsafe_print("ERROR: ", e.what(), '\n');

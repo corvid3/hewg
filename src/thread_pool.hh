@@ -40,14 +40,15 @@ public:
   void add_job(task_t func);
 };
 
-int
-run_command(std::string const command, std::span<std::string> args);
+// returns the exit code & stdout + stderr
+std::pair<int, std::string>
+run_command(std::string const command, std::span<std::string const> args);
 
 template<typename... Ts>
   requires(std::convertible_to<Ts, std::string_view> && ...)
-void
+auto
 run_command(std::string const command, Ts const... args)
 {
   std::array<std::string, sizeof...(Ts)> arr{ std::string(args)... };
-  run_command(command, arr);
+  return run_command(command, arr);
 }

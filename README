@@ -1,0 +1,35 @@
+# hewg
+Build system infrastructure and package manager for C/CXX.
+
+## what is hewg
+Hewg is a combination of a few tools into a single binary. Hewg is a simple and
+robust build system for C/CXX, which prefers to use config files rather than its
+own DSL. Hewg also performs simple package management and versioned dependency
+management for libraries written for hewg. Hewg aims to be simple to learn and
+set in stone, rather than constantly adding features and bloat.
+
+## how to build a project with hewg
+In a directory with hewg set up, simply type `hewg build`. By default hewg
+will select the current architecture as the build profile. Hewg will build all
+artifacts and spit out the finished product in the `target` directory, under the
+build profile which was selected.
+
+## how to install a package with hewg
+In the root directory of the repository that you wish to build and install,
+run `hewg build --release`, and then `hewg install`. Hewg will automatically
+manage creating files, directories, and marking the installed versions of a package.
+
+## how to clean a repository from build artifacts
+Simply run `hewg clean`. Hewg will remove all cached information of the project.
+
+## packages
+Each hewg "project" is a self-contained package. Every package is defined by
+it's own `hewg.scl` in its root directory.  Each package is defined by both
+the `hewg` and `project` tables in the `hewg.scl` file. The `hewg` table
+defines meta information about the build system, such as  the package type
+and the version of hewg used to build the package. The project table defines
+general information about the package, such as name, a short description, a
+list of authors, and the current version of the package. Package creators and
+maintainers are very highly advised to follow semantic versioning,  as closely
+as they can; as hewg performs dependency resolution by following semantic
+versioning for compatibility.

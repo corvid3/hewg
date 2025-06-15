@@ -21,5 +21,17 @@ compile_c_cxx(ThreadPool& pool,
 
 void
 link(ConfigurationFile const& config,
+     BuildOptions const& options,
      std::span<std::filesystem::path const> object_files,
      std::filesystem::path output_directory);
+
+void
+pack_static_library(ConfigurationFile const& config,
+                    std::span<std::filesystem::path const> object_files,
+                    std::filesystem::path output_directory);
+
+void
+shared_link(ConfigurationFile const& config,
+            BuildOptions const& options,
+            std::span<std::filesystem::path const> object_files,
+            std::filesystem::path output_directory);

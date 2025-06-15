@@ -100,7 +100,7 @@ struct DepfileParser
     out.obj_path = std::filesystem::path(lhs);
     out.src_path = dependencies.front();
 
-    for (auto i = ++dependencies.begin(); i != dependencies.end(); i++)
+    for (auto i = dependencies.begin(); i != dependencies.end(); i++)
       out.dependencies.push_back(std::filesystem::path(*i));
 
     return out;

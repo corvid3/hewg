@@ -1,11 +1,36 @@
 #pragma once
 
 #include <filesystem>
+#include <jayson.hh>
 #include <scl.hh>
 #include <string>
 #include <tuple>
 
 using version_triplet = std::tuple<int, int, int>;
+
+inline bool
+operator==(version_triplet const l, version_triplet const r)
+{
+  auto const [lx, ly, lz] = l;
+  auto const [rx, ry, rz] = r;
+
+  return lx == rx and ly == ry and lz == rz;
+}
+
+inline bool
+operator<(version_triplet const l, version_triplet const r)
+{
+  auto const [lx, ly, lz] = l;
+  auto const [rx, ry, rz] = r;
+
+  return lx < rx and ly < ry and lz < rz;
+}
+
+std::string inline version_triplet_to_string(version_triplet const t)
+{
+  auto const [x, y, z] = t;
+  return std::format("{}.{}.{}", x, y, z);
+}
 
 enum class ProjectType
 {
@@ -44,6 +69,12 @@ struct ProjectConf
                           scl::field<&ProjectConf::name, "name">,
                           scl::field<&ProjectConf::description, "description">,
                           scl::field<&ProjectConf::authors, "authors">>;
+
+  using jayson_fields =
+    std::tuple<jayson::obj_field<"version", &ProjectConf::version>,
+               jayson::obj_field<"name", &ProjectConf::name>,
+               jayson::obj_field<"description", &ProjectConf::description>,
+               jayson::obj_field<"authors", &ProjectConf::authors>>;
 };
 
 struct FlagsConf
@@ -68,25 +99,26 @@ struct FilesConf
 
 struct ToolsConf
 {
-  // TODO: update libscl such that it just
-  // uses default field initializers, not
-  // default values in the scl::field lol
-  std::string cxx_tool = "c++";
-  std::string c_tool = "cc";
-  std::string ld_tool = "ld";
+  std::optional<std::string> cxx_tool;
+  std::optional<std::string> c_tool;
+  std::optional<std::string> ld_tool;
 
   using scl_fields =
-    scl::field_descriptor<scl::field<&ToolsConf::cxx_tool, "cxx">,
-                          scl::field<&ToolsConf::c_tool, "c">,
-                          scl::field<&ToolsConf::ld_tool, "ld">>;
+    scl::field_descriptor<scl::field<&ToolsConf::cxx_tool, "cxx", false>,
+                          scl::field<&ToolsConf::c_tool, "c", false>,
+                          scl::field<&ToolsConf::ld_tool, "ld", false>>;
 };
+
+using PackageDep = std::tuple<std::string, version_triplet>;
 
 struct LibraryConf
 {
-  std::vector<std::string> privates = {};
+  std::vector<PackageDep> packages = {};
+  std::vector<std::string> native = {};
 
   using scl_fields =
-    scl::field_descriptor<scl::field<&LibraryConf::privates, "private", true>>;
+    scl::field_descriptor<scl::field<&LibraryConf::packages, "packages", false>,
+                          scl::field<&LibraryConf::native, "native", false>>;
 };
 
 struct ConfigurationFile
@@ -97,6 +129,14 @@ struct ConfigurationFile
   LibraryConf libs;
   FlagsConf flags;
   FilesConf files;
+
+  using scl_recurse =
+    scl::field_descriptor<scl::field<&ConfigurationFile::meta, "hewg">,
+                          scl::field<&ConfigurationFile::project, "project">,
+                          scl::field<&ConfigurationFile::tools, "tools">,
+                          scl::field<&ConfigurationFile::libs, "libs">,
+                          scl::field<&ConfigurationFile::flags, "flags">,
+                          scl::field<&ConfigurationFile::files, "files">>;
 };
 
 ConfigurationFile

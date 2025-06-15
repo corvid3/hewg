@@ -50,7 +50,17 @@ endif
 LDLIBS=-lscl
 LDFLAGS=
 
-SRCS=src/main.cc src/confs.cc src/compile.cc src/analysis.cc src/thread_pool.cc src/depfile.cc src/cmdline.cc
+SRCS=src/main.cc \
+	src/confs.cc \
+	src/common.cc \
+	src/compile.cc \
+	src/analysis.cc \
+	src/thread_pool.cc \
+	src/depfile.cc \
+	src/cmdline.cc \
+	src/install.cc \
+	src/jayson.cc
+
 OBJS=$(SRCS:.cc=.o)
 CSRCS=
 COBJS=$(CSRCS:.c=.o)

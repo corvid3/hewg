@@ -1,7 +1,10 @@
 #include "common.hh"
 #include "thread_pool.hh"
+#include <algorithm>
 #include <mutex>
+#include <regex>
 #include <sys/wait.h>
+#include <vector>
 
 // thread_local int thread_id = MAIN_THREAD_ID;
 
@@ -94,17 +97,18 @@ void
 ThreadPool::add_job(task_t func)
 {
   {
+    // LPT for anyone reading,
+    // use a reference_wrapper when passing a reference to a
+    // lambda. if using a raw reference, the lambda will take
+    // a reference to the reference, rather than just copying
+    // the reference value itself.
+    // this caused a bit of confusion here.
+
     std::scoped_lock lock(m_mutex);
-
-    m_tasks.push([this, func]() {
-      auto add_latch = [this]() -> std::latch& {
-        std::scoped_lock lock(m_mutex);
-        return this->m_taskLatches.emplace(1);
-      };
-
-      auto& latch = add_latch();
+    std::reference_wrapper<std::latch> latch = this->m_taskLatches.emplace(1);
+    m_tasks.push([func, latch]() {
       func();
-      latch.count_down();
+      latch.get().count_down();
     });
   }
 
@@ -112,10 +116,9 @@ ThreadPool::add_job(task_t func)
   // threadsafe_print("added task\n");
 }
 
-int
-run_command(std::string const command, std::span<std::string> args)
+std::pair<int, std::string>
+run_command(std::string const command, std::span<std::string const> args)
 {
-
   // use pipes to redirect stdout
   int fds[2];
 
@@ -141,7 +144,7 @@ run_command(std::string const command, std::span<std::string> args)
       what.append(" ");
     }
 
-    threadsafe_print(what, "\n");
+    threadsafe_print_verbose(what, "\n");
   }
 
   auto const pid = fork();
@@ -190,12 +193,11 @@ run_command(std::string const command, std::span<std::string> args)
 
     int const child_exit_code = WEXITSTATUS(childstatus);
 
-    return child_exit_code;
+    return { child_exit_code, stdout_buf };
   }
 
   // in an entirely new process here,
   // don't have to worry about async io
-
   dup2(fds[1], STDOUT_FILENO);
   dup2(fds[1], STDERR_FILENO);
   close(fds[0]);

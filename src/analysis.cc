@@ -8,11 +8,8 @@
 #include <format>
 #include <iterator>
 #include <jayson.hh>
-#include <list>
-#include <memory>
 #include <optional>
 #include <stdexcept>
-#include <string>
 #include <sys/stat.h>
 
 FileType
@@ -173,16 +170,24 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
       continue;
     }
 
+    // std::stringstream fmt;
+    // fmt << std::format(
+    //   "object: {}, date: {}\n", depfile.obj_path.string(), *obj_md);
+
     for (auto const& dep : depfile.dependencies) {
       auto const dep_md = get_modification_date_of_file(dep);
+
       if (not dep_md)
-        break;
+        continue;
+
+      // fmt << std::format("depfile: {}, date: {}\n", dep.string(), *dep_md);
 
       if (*dep_md > obj_md) {
         rebuilds.push_back(depfile.src_path);
         break;
       }
     }
+    // threadsafe_print(fmt.str(), '\n');
   }
 
   return rebuilds;

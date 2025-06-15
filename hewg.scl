@@ -12,7 +12,15 @@ authors = {  }
 cxx = { "-Wextra" "-Werror" "-std=c++23" }
 
 [libraries]
-private = { "scl" }
+#packages = { 
+#	{ "scl" { 0 0 1 } }
+#}
+native = { "scl" }
+
+# maybe use array tables eventually?
+# [[package]]
+# name = "scl"
+# version = { 0 0 1 }
 
 [files]
 source = {
@@ -23,4 +31,5 @@ source = {
     "thread_pool.cc"
     "depfile.cc"
     "cmdline.cc"
+    "common.cc"
 }

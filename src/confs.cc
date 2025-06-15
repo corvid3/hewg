@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <jayson.hh>
 #include <optional>
 #include <scl.hh>
 
@@ -76,4 +77,20 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
   scl::deserialize(conf.libs, file, "libraries");
 
   return conf;
+}
+
+jayson::val
+config_to_project_manifest(ConfigurationFile const&)
+{
+  throw std::runtime_error("config to project manifest unimplemented");
+
+  // jayson::obj out;
+
+  // out.insert_or_assign("name", config.project.name);
+
+  // jayson::array version;
+
+  // out.insert_or_assign("version", config.project.version);
+
+  // return out;
 }

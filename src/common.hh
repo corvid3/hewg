@@ -9,12 +9,49 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
 
 using namespace std::string_view_literals;
+
+template<typename T>
+class atomic_vec
+{
+  std::vector<T> m_vec;
+  mutable std::mutex m_mutex;
+
+public:
+  atomic_vec() = default;
+
+  template<typename M>
+  void push_back(M&& what)
+  {
+    std::scoped_lock lock(m_mutex);
+    m_vec.push_back(what);
+  }
+
+  void map(auto func)
+  {
+    std::scoped_lock lock(m_mutex);
+    for (auto& v : m_vec)
+      func(v);
+  }
+
+  void clear()
+  {
+    std::scoped_lock lock(m_mutex);
+    m_vec.clear();
+  }
+
+  auto size() const
+  {
+    std::scoped_lock lock(m_mutex);
+    return m_vec.size();
+  }
+};
 
 template<typename T, std::convertible_to<T>... As>
 auto
@@ -35,12 +72,11 @@ operator""_mb(unsigned long long const in)
   return in * 1024_kb;
 }
 
-template<typename L, std::convertible_to<L> R>
+template<typename L>
 void
-append_vec(std::vector<L>& into, std::vector<R>&& rhs)
+append_vec(std::vector<L>& into, std::ranges::range auto const& rhs)
 {
   std::copy(rhs.begin(), rhs.end(), std::inserter(into, into.end()));
-  // lhs.insert(lhs.end(), rhs.begin(), rhs.end());
 }
 
 static inline std::mutex stdout_mutex;
@@ -101,7 +137,7 @@ threadsafe_print(auto const&... v)
 
 // this is set to true in main()
 // if the verbose flag was set
-static inline bool verbose_output = false;
+inline bool verbose_output = false;
 
 inline void
 threadsafe_print_verbose(auto const&... v)
@@ -146,12 +182,8 @@ is_subpathed_by(std::filesystem::path const owning_directory,
   return m.first == owning_directory_full.end();
 }
 
-inline void
-create_directory_checked(std::filesystem::path const what)
-{
-  if (not std::filesystem::exists(what))
-    std::filesystem::create_directory(what);
-  if (not std::filesystem::is_directory(what))
-    throw std::runtime_error(std::format(
-      "{} must be a directory", std::filesystem::relative(what).string()));
-}
+void
+create_directory_checked(std::filesystem::path const what);
+
+std::filesystem::path const&
+get_home_directory();
