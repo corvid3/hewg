@@ -4,4 +4,4 @@
 // then subsequent rebuilds of hewg with itself will
 // create its own hewg version variable that overrides
 // this declaration in the linking stage
-__attribute__((weak)) int __hewg_version[3] = { 0, 0, 0 };
+__attribute__((weak)) int __hewg_version_package_hewg[3] = { 0, 0, 0 };

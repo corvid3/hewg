@@ -263,11 +263,16 @@ shared_link(ConfigurationFile const& config,
 }
 
 static std::string
-emit_symcache_contents(version_triplet const trip)
+emit_symcache_contents(std::string_view package_name,
+                       version_triplet const trip)
 {
   auto const [x, y, z] = trip;
 
-  return std::format("int __hewg_version[3] = {{ {}, {}, {} }};", x, y, z);
+  return std::format("int __hewg_version_package_{}[3] = {{ {}, {}, {} }};",
+                     package_name,
+                     x,
+                     y,
+                     z);
 }
 
 // returns true if requesting a rebuild of the builtin symbol file
@@ -279,7 +284,7 @@ check_symcache(ConfigurationFile const& config)
       << jayson::serialize(config.project.version).serialize();
 
     std::ofstream(hewg_builtinsym_src_path)
-      << emit_symcache_contents(config.project.version);
+      << emit_symcache_contents(config.project.name, config.project.version);
 
     return true;
   } else {
@@ -293,7 +298,7 @@ check_symcache(ConfigurationFile const& config)
     // if the version has changed, request a rebuild
     if (trip != config.project.version) {
       std::ofstream(hewg_builtinsym_src_path)
-        << emit_symcache_contents(config.project.version);
+        << emit_symcache_contents(config.project.name, config.project.version);
 
       std::ofstream(hewg_builtinsym_cache_path)
         << jayson::serialize(config.project.version).serialize();

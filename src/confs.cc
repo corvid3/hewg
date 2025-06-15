@@ -1,8 +1,10 @@
 #include <filesystem>
 #include <jayson.hh>
 #include <optional>
+#include <regex>
 #include <scl.hh>
 
+#include "analysis.hh"
 #include "common.hh"
 #include "confs.hh"
 #include "paths.hh"
@@ -45,6 +47,20 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
 
   ConfigurationFile conf;
   scl::deserialize(conf, file);
+
+  if (not semantically_valid(conf.meta.version, this_hewg_version))
+    throw std::runtime_error(
+      std::format("hewg project requests version {}, but we have {}",
+                  version_triplet_to_string(conf.meta.version),
+                  version_triplet_to_string(this_hewg_version)));
+
+  auto const& name = conf.project.name;
+  static std::regex name_validation("[a-zA-Z0-9\\_]+");
+  if (not std::regex_search(name, name_validation))
+    throw std::runtime_error(
+      std::format("project name <{}> is invalid; it must be alphanumeric "
+                  "including underscores",
+                  name));
 
   // now we do some jank where we append vectors
   // depending on the build profile

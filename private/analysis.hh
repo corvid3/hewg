@@ -48,3 +48,7 @@ get_modification_date_of_file(std::filesystem::path const p);
 std::vector<std::filesystem::path>
 mark_c_cxx_files_for_rebuild(
   std::span<std::filesystem::path const> source_files);
+
+bool
+semantically_valid(version_triplet const request_for,
+                   version_triplet const we_have);

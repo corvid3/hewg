@@ -1,9 +1,9 @@
 [hewg]
-version = { 0 0 1 }
+version = { 0 1 0 }
 type = "executable"
 
 [project]
-version = { 0 0 1 }
+version = { 0 1 0 }
 name = "hewg"
 description = "compiler build system and management software"
 authors = { "crow" }

@@ -168,9 +168,15 @@ clean(ThreadPool&,
 
   std::vector<std::filesystem::path> to_clean;
 
+  auto const delete_if_exists = [&](std::filesystem::path what) {
+    to_clean.push_back(what);
+  };
+
   // make sure to nuke the hook cache
-  if (std::filesystem::exists(hewg_hook_cache_path))
-    to_clean.push_back(hewg_hook_cache_path);
+  delete_if_exists(hewg_hook_cache_path);
+  delete_if_exists(hewg_builtinsym_cache_path);
+  delete_if_exists(hewg_builtinsym_src_path);
+  delete_if_exists(hewg_builtinsym_obj_path);
 
   {
     auto const source_filepaths = get_source_filepaths(config);
@@ -313,11 +319,8 @@ try {
   ThreadPool thread_pool(tl_options.num_tasks);
 
   if (tl_options.print_version) {
-    version_triplet triplet;
-    triplet = { __hewg_version[0], __hewg_version[1], __hewg_version[2] };
-
-    threadsafe_print(
-      std::format("version <{}>\n", version_triplet_to_string(triplet)));
+    threadsafe_print(std::format("version <{}>\n",
+                                 version_triplet_to_string(this_hewg_version)));
   }
 
   if (std::holds_alternative<std::monostate>(scmds)) {

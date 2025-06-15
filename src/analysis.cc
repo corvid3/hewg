@@ -192,3 +192,19 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
 
   return rebuilds;
 }
+
+bool
+semantically_valid(version_triplet const request_for,
+                   version_triplet const we_have)
+{
+  auto const [rmaj, rmin, rpat] = request_for;
+  auto const [wmaj, wmin, wpat] = we_have;
+
+  if (rmaj > wmaj)
+    return false;
+
+  if (rmin > wmin)
+    return false;
+
+  return true;
+}
