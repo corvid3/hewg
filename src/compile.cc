@@ -214,6 +214,12 @@ link(ConfigurationFile const& config,
   append_vec(args, get_library_flags(config, false));
 
   run_command("c++", args);
+
+  // we also want to strip the executable if we're
+  // creating a release executable
+  if (options.release) {
+    run_command("strip", "-s", output_filepath.string());
+  }
 }
 
 void
