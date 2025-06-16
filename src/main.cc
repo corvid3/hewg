@@ -121,6 +121,13 @@ build(ThreadPool& threads,
 
   trigger_prebuild_hooks(config);
 
+  // handle header projects early,
+  // to skip all of the analysis
+  if (config.meta.type == ProjectType::Headers) {
+    triggers_postbuild_hooks(config);
+    return;
+  }
+
   std::vector<std::filesystem::path> object_files;
 
   // just build
@@ -145,8 +152,8 @@ build(ThreadPool& threads,
       shared_link(config, build_opts, object_files, emit_dir);
       break;
 
+      // already handled this earlier in the function, just skip
     case ProjectType::Headers:
-      threadsafe_print("header project mode is unimplemented\n");
       break;
   }
 
@@ -321,8 +328,13 @@ try {
   ThreadPool thread_pool(tl_options.num_tasks);
 
   if (tl_options.print_version) {
+    using namespace std::chrono;
+    auto const dur = duration<long>(__hewg_build_date_package_hewg);
+    auto const since_epoch = time_point<utc_clock, seconds>(dur);
+
     threadsafe_print(std::format("version <{}>\n",
                                  version_triplet_to_string(this_hewg_version)));
+    threadsafe_print(std::format("built <{}> UTC\n", since_epoch));
 
     return 0;
   }
