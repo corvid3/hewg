@@ -6,34 +6,56 @@
 
 struct CleanOptions : terse::TerminalSubcommand
 {
-  constexpr static auto name = terse::comptime_str("clean");
-  using options = std::tuple<>;
+  constexpr static auto name = "clean";
+  constexpr static auto usage =
+    "removes all build artifacts from the hewg cache";
+
+  bool help = false;
+
+  using options = std::tuple<
+    terse::Option<"help", 'h', "prints this help", &CleanOptions::help>>;
 };
 
 struct InitOptions : terse::TerminalSubcommand
 {
-  constexpr static auto name = terse::comptime_str("init");
-  using options = std::tuple<>;
+  constexpr static auto name = "init";
+  constexpr static auto usage =
+    "initializes a basic hewg project in the current directory";
+
+  bool help = false;
+
+  using options = std::tuple<
+    terse::Option<"help", 'h', "prints this help", &InitOptions::help>>;
 };
 
 struct InstallOptions : terse::TerminalSubcommand
 {
-  constexpr static auto name = terse::comptime_str("install");
-  using options = std::tuple<>;
+  constexpr static auto name = "install";
+  constexpr static auto usage =
+    "installs a built hewg project into the users path";
+
+  bool help = false;
+
+  using options = std::tuple<
+    terse::Option<"help", 'h', "prints this help", &InstallOptions::help>>;
 };
 
 struct BuildOptions : terse::TerminalSubcommand
 {
-  constexpr static auto name = terse::comptime_str("build");
+  constexpr static auto name = "build";
+  constexpr static auto usage =
+    "triggers the hewg build system on the current project";
 
+  bool help = false;
   bool release = false;
 
-  using options =
-    std::tuple<terse::Option<"release",
-                             std::nullopt,
-                             "changes the build type to release mode, enabling "
-                             "all optimizations and stripping",
-                             &BuildOptions::release>>;
+  using options = std::tuple<
+    terse::Option<"help", 'h', "prints this help", &BuildOptions::help>,
+    terse::Option<"release",
+                  std::nullopt,
+                  "changes the build type to release mode, enabling "
+                  "all optimizations and stripping",
+                  &BuildOptions::release>>;
 };
 
 struct ToplevelOptions : terse::NonterminalSubcommand
@@ -43,6 +65,10 @@ struct ToplevelOptions : terse::NonterminalSubcommand
   std::optional<std::string> config_file_path;
 
   bool print_version = false;
+
+  constexpr static auto name = "hewg";
+  constexpr static auto usage =
+    "C/CXX build system and package manager infrastructure";
 
   using options = std::tuple<
     terse::Option<"verbose",

@@ -7,8 +7,10 @@
 #include "thread_pool.hh"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <iterator>
 #include <jayson.hh>
 
@@ -274,11 +276,22 @@ emit_symcache_contents(std::string_view package_name,
 {
   auto const [x, y, z] = trip;
 
-  return std::format("int __hewg_version_package_{}[3] = {{ {}, {}, {} }};",
+  std::string out;
+
+  out += std::format("int __hewg_version_package_{}[3] = {{ {}, {}, {} }};\n",
                      package_name,
                      x,
                      y,
                      z);
+
+  using namespace std::chrono;
+
+  auto const now = duration_cast<seconds>(utc_clock::now().time_since_epoch());
+
+  out += std::format(
+    "long __hewg_build_date_package_{} = {};\n", package_name, now.count());
+
+  return out;
 }
 
 // returns true if requesting a rebuild of the builtin symbol file

@@ -37,6 +37,9 @@ enum class ProjectType
   Executable,
   StaticLibrary,
   SharedLibrary,
+
+  // header only libraries
+  Headers,
 };
 
 std::string_view project_type_to_string(ProjectType);

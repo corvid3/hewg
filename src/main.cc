@@ -144,6 +144,10 @@ build(ThreadPool& threads,
     case ProjectType::SharedLibrary:
       shared_link(config, build_opts, object_files, emit_dir);
       break;
+
+    case ProjectType::Headers:
+      threadsafe_print("header project mode is unimplemented\n");
+      break;
   }
 
   triggers_postbuild_hooks(config);
@@ -304,8 +308,6 @@ try {
   // ensures that side effects don't happen in non-hewg directories
   check_valid_dir();
 
-  threadsafe_print("compiler master hewg starts his work...\n");
-
   auto const [tl_options, scmds, bares] = parse_cmdline(argc, argv);
 
   if (tl_options.verbose_print)
@@ -321,23 +323,42 @@ try {
   if (tl_options.print_version) {
     threadsafe_print(std::format("version <{}>\n",
                                  version_triplet_to_string(this_hewg_version)));
+
+    return 0;
   }
 
   if (std::holds_alternative<std::monostate>(scmds)) {
-    // print usage here
-    printf("TODO: print usage... (should probably edit terse to have a usage "
-           "print cmd)\n");
+    std::cout << terse::print_usage<ToplevelOptions>() << std::endl;
   } else if (std::holds_alternative<BuildOptions>(scmds)) {
     auto options = std::get<BuildOptions>(scmds);
+
+    if (options.help)
+      std::cout << terse::print_usage<BuildOptions>() << std::endl,
+        std::exit(0);
+
     build(thread_pool, config_path, options, bares);
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
+
+    if (options.help)
+      std::cout << terse::print_usage<CleanOptions>() << std::endl,
+        std::exit(0);
+
     clean(thread_pool, config_path, options, bares);
   } else if (std::holds_alternative<InitOptions>(scmds)) {
     auto options = std::get<InitOptions>(scmds);
+
+    if (options.help)
+      std::cout << terse::print_usage<InitOptions>() << std::endl, std::exit(0);
+
     init(thread_pool, config_path, options, bares);
   } else if (std::holds_alternative<InstallOptions>(scmds)) {
     auto options = std::get<InstallOptions>(scmds);
+
+    if (options.help)
+      std::cout << terse::print_usage<InstallOptions>() << std::endl,
+        std::exit(0);
+
     auto const profile = get_build_profile(bares);
     ConfigurationFile const config = get_config_file(config_path, profile);
     install(config, options, profile);

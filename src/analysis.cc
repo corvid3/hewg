@@ -4,6 +4,7 @@
 #include "depfile.hh"
 #include "paths.hh"
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <format>
 #include <iterator>
@@ -11,6 +12,8 @@
 #include <optional>
 #include <stdexcept>
 #include <sys/stat.h>
+#include <system_error>
+#include <vector>
 
 FileType
 translate_filename_to_filetype(std::filesystem::path const s)
@@ -111,12 +114,20 @@ get_files_by_type(std::span<std::filesystem::path const> files,
 std::optional<unsigned>
 get_modification_date_of_file(std::filesystem::path const p)
 {
-  if (not std::filesystem::exists(p))
+  std::error_code code;
+  auto const write_time = std::filesystem::last_write_time(p, code);
+
+  if (code)
     return std::nullopt;
 
-  struct stat attr;
-  stat(p.c_str(), &attr);
-  return attr.st_mtime;
+  using namespace std::chrono;
+
+  // return time in seconds
+  // wow this is ugly
+  return duration_cast<seconds>(
+           utc_clock::from_sys(file_clock::to_sys(write_time))
+             .time_since_epoch())
+    .count();
 }
 
 std::vector<Depfile>
@@ -200,11 +211,50 @@ semantically_valid(version_triplet const request_for,
   auto const [rmaj, rmin, rpat] = request_for;
   auto const [wmaj, wmin, wpat] = we_have;
 
-  if (rmaj > wmaj)
+  // major version must match exactly
+  if (rmaj != wmaj)
     return false;
 
+  // provided minor version must be at least
+  // equal to or greater than the requested version
   if (rmin > wmin)
     return false;
 
+  // patch versions don't play a role
+  // in selecting
   return true;
+}
+
+std::optional<version_triplet>
+select_best_compatable_semver(std::span<version_triplet const> list_,
+                              version_triplet const requested)
+{
+  std::vector<version_triplet> list(list_.begin(), list_.end());
+
+  auto const [rx, ry, rz] = requested;
+
+  // requested major version must be
+  // exactly equal to the provided minor version
+  std::erase_if(list, [=](version_triplet const in) {
+    auto const [x, _y, _z] = in;
+    return x != rx;
+  });
+
+  if (list.empty())
+    return std::nullopt;
+
+  // requested minor version must be less than or equal to
+  // the provided minor version
+  std::erase_if(list, [=](version_triplet const in) {
+    auto const [_x, y, _z] = in;
+    return y < ry;
+  });
+
+  if (list.empty())
+    return std::nullopt;
+
+  // select the highest patch version
+  std::sort(list.begin(), list.end());
+
+  return list.back();
 }

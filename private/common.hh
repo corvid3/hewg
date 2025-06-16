@@ -18,6 +18,8 @@
 using namespace std::string_view_literals;
 
 extern "C" int __hewg_version_package_hewg[3];
+extern "C" long __hewg_build_date_package_hewg;
+
 inline version_triplet this_hewg_version = { __hewg_version_package_hewg[0],
                                              __hewg_version_package_hewg[1],
                                              __hewg_version_package_hewg[2] };

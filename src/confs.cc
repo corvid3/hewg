@@ -7,7 +7,6 @@
 #include "analysis.hh"
 #include "common.hh"
 #include "confs.hh"
-#include "paths.hh"
 
 std::string_view
 project_type_to_string(ProjectType const t)
@@ -15,7 +14,8 @@ project_type_to_string(ProjectType const t)
   static const std::map<ProjectType, std::string> mapping = {
     { ProjectType::Executable, "executable" },
     { ProjectType::StaticLibrary, "library" },
-    { ProjectType::SharedLibrary, "shared" }
+    { ProjectType::SharedLibrary, "dynlib" },
+    { ProjectType::Headers, "headers" },
   };
 
   return mapping.find(t)->second;
@@ -27,7 +27,8 @@ project_type_from_string(std::string_view s)
   static const std::map<std::string, ProjectType, std::less<>> mapping = {
     { "executable", ProjectType::Executable },
     { "library", ProjectType::StaticLibrary },
-    { "shared", ProjectType::SharedLibrary },
+    { "dynlib", ProjectType::SharedLibrary },
+    { "headers", ProjectType::Headers },
   };
 
   auto const find = mapping.find(s);

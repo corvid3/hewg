@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <vector>
 
 enum class FileType
@@ -52,3 +53,7 @@ mark_c_cxx_files_for_rebuild(
 bool
 semantically_valid(version_triplet const request_for,
                    version_triplet const we_have);
+
+std::optional<version_triplet>
+select_best_compatable_semver(std::span<version_triplet const> list,
+                              version_triplet const requested);
