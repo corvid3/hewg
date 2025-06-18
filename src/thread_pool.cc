@@ -1,10 +1,10 @@
-#include "common.hh"
-#include "thread_pool.hh"
-#include <algorithm>
 #include <mutex>
-#include <regex>
+#include <ranges>
 #include <sys/wait.h>
 #include <vector>
+
+#include "common.hh"
+#include "thread_pool.hh"
 
 // thread_local int thread_id = MAIN_THREAD_ID;
 

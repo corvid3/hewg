@@ -1,273 +1,143 @@
+#include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <format>
+#include <iterator>
+#include <jayson.hh>
+#include <span>
+
 #include "analysis.hh"
-#include "cmdline.hh"
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <exception>
-#include <filesystem>
-#include <format>
-#include <iterator>
-#include <jayson.hh>
 
-// TODO: for every task i spawn, i also run get_common_flags,
-// i should only need to call it once and then just pass a ref to it
+constexpr auto generate_file_flags =
+  [](std::filesystem::path const filepath,
+     std::filesystem::path const depfile,
+     std::filesystem::path const object_file) static
+  -> std::vector<std::string> {
+  using std::filesystem::relative;
 
-static auto
-get_common_c_cxx_flags(ConfigurationFile const& config,
-                       std::filesystem::path const file,
-                       std::filesystem::path const dep_filepath,
-                       std::filesystem::path const obj_filepath,
-                       bool const is_release)
-{
-  std::vector<std::string> args;
+  return {
+    "-MMD",
+    "-MF",
+    relative(depfile),
+    "-o",
+    relative(object_file),
+    relative(filepath),
+  };
+};
 
-  if (config.meta.type == ProjectType::SharedLibrary) {
-    args.push_back("-fPIC");
-  }
+constexpr auto generate_common_flags =
+  [](bool const is_release, bool const PIC) static -> std::vector<std::string> {
+  static const std::vector<std::string> common_flags = {
+    "-c",
+    "-Iprivate",
+    "-Iinclude",
+    "-fdiagnostics-color=always",
+  };
 
-  args.push_back("-c");
-  args.push_back("-Iprivate");
-  args.push_back("-Iinclude");
-  args.push_back("-MMD");
-  args.push_back("-MF");
-  args.push_back(std::filesystem::relative(dep_filepath));
-  args.push_back("-o");
-  args.push_back(std::filesystem::relative(obj_filepath));
-  args.push_back(std::filesystem::relative(file));
-
-  // force enable coloured output
-  args.push_back("-fdiagnostics-color=always");
-
-  if (is_release) {
-    args.push_back("-O2");
-  } else {
-    args.push_back("-Og");
-    args.push_back("-g");
-  }
-
-  return args;
-}
-
-static auto
-get_library_flags(ConfigurationFile const& config,
-                  bool const ignore_static_libraries)
-{
-  (void)ignore_static_libraries;
-
-  std::vector<std::string> args;
-
-  for (auto const& native_library : config.libs.native)
-    args.push_back(std::format("-l{}", native_library));
-
-  for (auto const& packaged_library : config.libs.packages) {
-    (void)packaged_library;
-  }
-
-  return args;
-}
-
-static auto
-generate_link_flags(ConfigurationFile const& config,
-                    bool const is_release,
-                    std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path const output_filepath)
-{
-  std::vector<std::string> args;
-
-  args.insert(args.end(), object_files.begin(), object_files.end());
-  std::ranges::transform(args, args.begin(), [](auto const& file) {
-    return std::filesystem::relative(file);
-  });
-
-  args.push_back("-o");
-  args.push_back(output_filepath);
-
-  if (config.tools.ld_tool)
-    args.push_back(std::format("-fuse-ld={}", *config.tools.ld_tool));
+  auto copy = common_flags;
 
   if (is_release)
-    args.push_back("-flto");
+    copy = copy + std::vector<std::string>{ "-O2" };
+  else
+    copy = copy + std::vector<std::string>{ "-Og", "-g" };
 
-  // TODO: add options for libraries
+  if (PIC)
+    copy = copy + std::vector<std::string>{ "-fPIC" };
 
-  return args;
-}
+  return copy;
+};
 
-static void
-write_error_file(std::filesystem::path src_file, std::string_view what)
-{
-  auto const relative =
-    std::filesystem::relative(src_file, hewg_src_directory_path);
-  auto const file = hewg_err_directory_path / relative;
+constexpr auto generate_c_flags =
+  [](ConfigurationFile const& config,
+     bool const is_release,
+     bool const PIC) static -> std::vector<std::string> {
+  return generate_common_flags(is_release, PIC) + config.flags.c_flags;
+};
 
-  std::filesystem::create_directories(file.parent_path());
-  std::ofstream(file) << what;
+constexpr auto generate_cxx_flags =
+  [](ConfigurationFile const& config,
+     bool const is_release,
+     bool const PIC) static -> std::vector<std::string> {
+  return generate_common_flags(is_release, PIC) + config.flags.cxx_flags;
+};
 
-  // strip the output file of console codes with sed,
-  // if there's any
-  std::vector<std::string> sed_args;
-  sed_args.push_back(R"(s/\x1B\[[0-9;]*[mKG]//g)");
-  sed_args.push_back(file);
-  sed_args.push_back("-i");
+// static void
+// write_error_file(std::filesystem::path src_file, std::string_view what)
+// {
+//   auto const relative =
+//     std::filesystem::relative(src_file, hewg_src_directory_path);
+//   auto const file = hewg_err_directory_path / relative;
 
-  run_command("sed", sed_args);
-}
+//   std::filesystem::create_directories(file.parent_path());
+//   std::ofstream(file) << what;
+
+//   // strip the output file of console codes with sed,
+//   // if there's any
+//   std::vector<std::string> sed_args;
+//   sed_args.push_back(R"(s/\x1B\[[0-9;]*[mKG]//g)");
+//   sed_args.push_back(file);
+//   sed_args.push_back("-i");
+
+//   run_command("sed", sed_args);
+// }
 
 // will set successful_compile to false
 // if the task failed
 static void
 start_cxx_compile_task(ThreadPool& thread_pool,
                        ConfigurationFile const& config,
-                       BuildOptions const& options,
-                       std::filesystem::path const file,
+                       std::filesystem::path const source_filepath,
+                       std::vector<std::string> args,
                        atomic_vec<std::string>& failed_compiles)
 {
-  thread_pool.add_job([=, &config, &thread_pool, &failed_compiles]() {
-    auto const obj_filepath = object_file_for(file);
-    auto const dep_filepath = depfile_for(file);
+  thread_pool.add_job(
+    [source_filepath, args, &config, &thread_pool, &failed_compiles]() {
+      auto const relative_path =
+        std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
 
-    // create the directories for the cache
-    std::filesystem::create_directories(obj_filepath.parent_path());
+      threadsafe_print(
+        std::format("compiling CXX file: <{}>\n", relative_path.string()));
 
-    auto args = get_common_c_cxx_flags(
-      config, file, dep_filepath, obj_filepath, options.release);
+      auto const [exit_code, what] =
+        run_command(config.tools.cxx_tool.value_or("c++"), args);
 
-    append_vec(args, config.flags.cxx_flags);
-
-    threadsafe_print(std::format(
-      "compiling CXX file: <{}>\n",
-      std::filesystem::relative(file, hewg_src_directory_path).string()));
-
-    auto const [code, what] =
-      run_command(config.tools.cxx_tool.value_or("c++"), args);
-
-    if (code != 0) {
-      // mark the complie as a failure
-      // and get rid of all future compile tasks
-      failed_compiles.push_back(
-        (std::filesystem::relative(file, hewg_src_directory_path)).string());
-      thread_pool.drain();
-
-      write_error_file(file, what);
-
-      std::ofstream();
-    }
-  });
+      if (exit_code != 0) {
+        failed_compiles.push_back(relative_path);
+        thread_pool.drain();
+        // write_error_file(source_filepath, what);
+      }
+    });
 }
 
 static void
 start_c_compile_task(ThreadPool& thread_pool,
                      ConfigurationFile const& config,
-                     BuildOptions const& options,
-                     std::filesystem::path const file,
+                     std::filesystem::path const source_filepath,
+                     std::vector<std::string> args,
                      atomic_vec<std::string>& failed_compiles)
 {
-  thread_pool.add_job([=, &config, &thread_pool, &failed_compiles]() {
-    auto const obj_filepath = object_file_for(file);
-    auto const dep_filepath = depfile_for(file);
+  thread_pool.add_job(
+    [source_filepath, args, &config, &thread_pool, &failed_compiles]() {
+      auto const relative_path =
+        std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
 
-    // create the directories for the cache
-    std::filesystem::create_directories(obj_filepath.parent_path());
+      threadsafe_print(
+        std::format("compiling C file: <{}>\n", relative_path.string()));
 
-    auto args = get_common_c_cxx_flags(
-      config, file, dep_filepath, obj_filepath, options.release);
+      auto const [exit_code, what] =
+        run_command(config.tools.c_tool.value_or("cc"), args);
 
-    args.insert(
-      args.end(), config.flags.c_flags.begin(), config.flags.c_flags.end());
-
-    threadsafe_print(std::format(
-      "compiling C file: <{}>\n",
-      std::filesystem::relative(file, hewg_src_directory_path).string()));
-
-    auto const [code, what] =
-      run_command(config.tools.c_tool.value_or("cc"), args);
-
-    if (code != 0) {
-      // mark the complie as a failure
-      // and get rid of all future compile tasks
-      failed_compiles.push_back(
-        (std::filesystem::relative(file, hewg_src_directory_path)).string());
-      thread_pool.drain();
-
-      write_error_file(file, what);
-    }
-  });
-}
-
-void
-link(ConfigurationFile const& config,
-     BuildOptions const& options,
-     std::span<std::filesystem::path const> object_files,
-     std::filesystem::path output_directory)
-{
-  if (not std::filesystem::is_directory(output_directory))
-    throw std::runtime_error("output_directory in link() isn't a directory");
-
-  auto const output_filepath = output_directory / config.project.name;
-
-  auto args =
-    generate_link_flags(config, options.release, object_files, output_filepath);
-  threadsafe_print("now lets get linking...\n");
-  append_vec(args, get_library_flags(config, false));
-
-  run_command("c++", args);
-
-  // we also want to strip the executable if we're
-  // creating a release executable
-  if (options.release) {
-    run_command("strip", "-s", output_filepath.string());
-  }
-}
-
-void
-pack_static_library(ConfigurationFile const& config,
-                    std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path output_directory)
-{
-  if (not std::filesystem::is_directory(output_directory))
-    throw std::runtime_error(
-      "output_directory in pack_static_library() isn't a directory");
-
-  std::filesystem::path const outfile =
-    output_directory / std::format("lib{}.a", config.project.name);
-
-  std::vector<std::string> commands;
-  commands.push_back("rcs");
-  commands.push_back(outfile.string());
-  for (auto const& objects : object_files)
-    commands.push_back(objects.string());
-  run_command("ar", commands);
-}
-
-void
-shared_link(ConfigurationFile const& config,
-            BuildOptions const& options,
-            std::span<std::filesystem::path const> object_files,
-            std::filesystem::path output_directory)
-{
-  if (not std::filesystem::is_directory(output_directory))
-    throw std::runtime_error(
-      "output_directory in shared_link() isn't a directory");
-
-  std::filesystem::path const outfile =
-    output_directory / std::format("lib{}.so", config.project.name);
-
-  std::vector<std::string> args =
-    generate_link_flags(config, options.release, object_files, outfile);
-
-  // ignore static libraries here
-  // and defer their linking by adding them to the
-  // descriptor of the package file
-  append_vec(args, get_library_flags(config, true));
-
-  args.push_back("-shared");
-
-  run_command("c++", args);
+      if (exit_code != 0) {
+        failed_compiles.push_back(relative_path);
+        thread_pool.drain();
+        // write_error_file(source_filepath, what);
+      }
+    });
 }
 
 static std::string
@@ -328,17 +198,9 @@ check_symcache(ConfigurationFile const& config)
   }
 }
 
-std::vector<std::filesystem::path>
-compile_c_cxx(ThreadPool& pool,
-              ConfigurationFile const& config,
-              BuildOptions const& options)
+static auto
+ensure_symcache(ConfigurationFile const& config)
 {
-  auto const source_filepaths = get_source_filepaths(config);
-  auto const rebuilds = mark_c_cxx_files_for_rebuild(source_filepaths);
-
-  auto const cxx_rebuilds = get_files_by_type(rebuilds, FileType::CXXSource);
-  auto const c_rebuilds = get_files_by_type(rebuilds, FileType::CSource);
-
   if (check_symcache(config)) {
     run_command("cc",
                 hewg_builtinsym_src_path.string(),
@@ -347,16 +209,108 @@ compile_c_cxx(ThreadPool& pool,
                 "-o",
                 hewg_builtinsym_obj_path.string());
   }
+}
+
+static auto
+ensure_object_output_paths_exist(
+  std::span<std::filesystem::path const> object_filepaths)
+{
+  for (auto const& path : object_filepaths)
+    std::filesystem::create_directories(path.parent_path());
+}
+
+/*
+  for executables,
+  just compile the object files once,
+  not PIC
+
+  for static libraries,
+  compile the object files twice
+  one without PIC, one with PIC
+
+  for dynamic libraries,
+  compile the object files once,
+  just with PIC
+*/
+
+std::vector<std::filesystem::path>
+compile_c_cxx(ThreadPool& pool,
+              ConfigurationFile const& config,
+              bool const release,
+              bool const PIC)
+{
+  auto const c_filepaths = get_c_source_filepaths(config);
+  auto const cxx_filepaths = get_cxx_source_filepaths(config);
+
+  auto const object_files = ({
+    std::vector<std::filesystem::path> c_objects;
+    std::vector<std::filesystem::path> cxx_objects;
+
+    std::ranges::transform(c_filepaths,
+                           std::inserter(c_objects, c_objects.end()),
+                           object_file_for_c);
+    std::ranges::transform(cxx_filepaths,
+                           std::inserter(cxx_objects, cxx_objects.end()),
+                           object_file_for_cxx);
+
+    std::vector<std::filesystem::path> objects;
+    std::ranges::set_union(
+      c_objects, cxx_objects, std::inserter(objects, objects.end()));
+
+    objects.push_back(hewg_builtinsym_obj_path);
+
+    objects;
+  });
+
+  auto const c_rebuilds = mark_c_files_for_rebuild(c_filepaths);
+  auto const cxx_rebuilds = mark_cxx_files_for_rebuild(cxx_filepaths);
+
+  auto const c_flags = generate_c_flags(config, release, PIC);
+  auto const cxx_flags = generate_cxx_flags(config, release, PIC);
 
   atomic_vec<std::string> failed_compiles;
 
-  for (auto const& rebuild : c_rebuilds)
-    start_c_compile_task(pool, config, options, rebuild, failed_compiles);
+  {
+    std::string cxx_flags_fmt;
+    std::ranges::for_each(cxx_flags, [&](std::string_view in) {
+      cxx_flags_fmt += in, cxx_flags_fmt += ' ';
+    });
 
-  for (auto const& rebuild : cxx_rebuilds)
-    start_cxx_compile_task(pool, config, options, rebuild, failed_compiles);
+    std::string c_flags_fmt;
+    std::ranges::for_each(c_flags, [&](std::string_view in) {
+      c_flags_fmt += in, c_flags_fmt += ' ';
+    });
 
-  pool.block_until_finished();
+    threadsafe_print_verbose(std::format("CXX flags: {}", cxx_flags_fmt));
+    threadsafe_print_verbose(std::format("C flags: {}", c_flags_fmt));
+  }
+
+  ensure_symcache(config);
+  ensure_object_output_paths_exist(object_files);
+
+  {
+    for (auto const& rebuild : c_rebuilds)
+      start_c_compile_task(pool,
+                           config,
+                           rebuild,
+                           c_flags +
+                             generate_file_flags(rebuild,
+                                                 depfile_for_c(rebuild),
+                                                 object_file_for_c(rebuild)),
+                           failed_compiles);
+
+    for (auto const& rebuild : cxx_rebuilds)
+      start_cxx_compile_task(
+        pool,
+        config,
+        rebuild,
+        cxx_flags + generate_file_flags(rebuild,
+                                        depfile_for_cxx(rebuild),
+                                        object_file_for_cxx(rebuild)),
+        failed_compiles);
+
+    pool.block_until_finished();
+  }
 
   if (failed_compiles.size() > 0) {
     threadsafe_print("errors in files:\n");
@@ -365,18 +319,6 @@ compile_c_cxx(ThreadPool& pool,
 
     throw std::runtime_error("fatal errors when compiling cxx source files");
   }
-
-  std::vector<std::filesystem::path> object_files;
-  auto c_objs = get_files_by_type(source_filepaths, FileType::CSource);
-  auto cxx_objs = get_files_by_type(source_filepaths, FileType::CXXSource);
-
-  std::ranges::transform(c_objs, c_objs.begin(), object_file_for);
-  std::ranges::transform(cxx_objs, cxx_objs.begin(), object_file_for);
-
-  std::ranges::set_union(
-    c_objs, cxx_objs, std::inserter(object_files, object_files.end()));
-
-  object_files.push_back(hewg_builtinsym_obj_path);
 
   return object_files;
 }

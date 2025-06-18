@@ -13,7 +13,9 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 using namespace std::string_view_literals;
 
@@ -80,10 +82,19 @@ operator""_mb(unsigned long long const in)
 }
 
 template<typename L>
-void
+auto&
 append_vec(std::vector<L>& into, std::ranges::range auto const& rhs)
 {
-  std::copy(rhs.begin(), rhs.end(), std::inserter(into, into.end()));
+  into.insert(into.end(), rhs.begin(), rhs.end());
+  return into;
+}
+
+template<typename L>
+decltype(auto)
+operator+(std::vector<L> lhs, std::vector<L> rhs)
+{
+  lhs.insert(lhs.end(), rhs.begin(), rhs.end());
+  return lhs;
 }
 
 static inline std::mutex stdout_mutex;
@@ -140,6 +151,10 @@ threadsafe_print(auto const&... v)
     "{}{:13}\x1b[39;49m| ", get_color_by_thread_id(), thread_fmt);
 
   std::cout << s;
+
+  // just make sure theres a line ending
+  if (not s.ends_with('\n'))
+    std::cout << '\n';
 }
 
 // this is set to true in main()
@@ -194,3 +209,9 @@ create_directory_checked(std::filesystem::path const what);
 
 std::filesystem::path const&
 get_home_directory();
+
+// use this if you need to buffer some actions
+// on the terminal with time
+// use this whenever you're deleting files, probably
+void
+do_terminal_countdown(int const num);

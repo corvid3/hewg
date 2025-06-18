@@ -56,13 +56,18 @@ SRCS=src/main.cc \
 	src/compile.cc \
 	src/analysis.cc \
 	src/thread_pool.cc \
+	src/build.cc \
+	src/link.cc \
 	src/depfile.cc \
 	src/cmdline.cc \
 	src/install.cc \
+	src/packages.cc \
+	src/hooks.cc \
 	src/jayson.cc
 
+CSRCS=csrc/bootstrap_version.c
+
 OBJS=$(SRCS:.cc=.o)
-CSRCS=
 COBJS=$(CSRCS:.c=.o)
 
 default: hewg

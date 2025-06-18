@@ -12,39 +12,34 @@ authors = { "crow" }
 cxx = { "-Wextra" "-Werror" "-std=c++23" }
 
 [libraries]
-#packages = { 
-#	{ "scl" { 0 0 1 } }
-#}
 native = { "scl" }
 
-# maybe use array tables eventually?
-# [[package]]
-# name = "scl"
-# version = { 0 0 1 }
-
-# hooks that get called once,
-# unless the project gets cleaned
 [hooks.prebuild]
-# once = { "test.sh" }
-# always = { }
-
 [hooks.postbuild]
-# once = { }
-# always = { }
 
 [files]
-source = {
+cxx = {
     "main.cc"
-    "confs.cc"
-    "compile.cc"
-    "analysis.cc"
-    "thread_pool.cc"
-    "depfile.cc"
-    "cmdline.cc"
+
     "common.cc"
-    "install.cc"
-    "hooks.cc"
+    "confs.cc"
+    "cmdline.cc"
+    "thread_pool.cc"
     "jayson.cc"
 
+    "compile.cc"
+    "link.cc"
+
+    "build.cc"
+    "hooks.cc"
+
+    "packages.cc"
+    "install.cc"
+
+    "analysis.cc"
+    "depfile.cc"
+}
+
+c = {
     "bootstrap_version.c"
 }

@@ -1,8 +1,11 @@
 #include "common.hh"
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <mutex>
 #include <pwd.h>
+#include <thread>
 #include <unistd.h>
 
 void
@@ -42,4 +45,14 @@ get_home_directory()
   std::call_once(once, [&]() { home_path = func(); });
 
   return home_path;
+}
+
+void
+do_terminal_countdown(int const num)
+{
+  for (auto i = 0; i < num; i++) {
+    threadsafe_print(std::format("{}...\n", num - i));
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
 }

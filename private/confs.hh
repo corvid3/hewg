@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cmdline.hh"
 #include <filesystem>
 #include <jayson.hh>
 #include <scl.hh>
@@ -93,9 +94,11 @@ struct FlagsConf
 
 struct FilesConf
 {
-  std::vector<std::string> source;
+  std::vector<std::string> cxx;
+  std::vector<std::string> c;
 
-  using scl_fields = std::tuple<scl::field<&FilesConf::source, "source">>;
+  using scl_fields = std::tuple<scl::field<&FilesConf::cxx, "cxx">,
+                                scl::field<&FilesConf::c, "c">>;
 };
 
 struct ToolsConf
@@ -157,7 +160,9 @@ struct ConfigurationFile
 };
 
 ConfigurationFile
-get_config_file(std::filesystem::path path, std::string_view build_profile);
+get_config_file(ToplevelOptions const&,
+                std::filesystem::path path,
+                std::string_view build_profile);
 
 constexpr auto LINUX_BUILD_PROFILE = "linux";
 constexpr auto MINGW_BUILD_PROFILE = "mingw";

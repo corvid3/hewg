@@ -112,7 +112,8 @@ using parser = pctx::Engine<pctx::ExpectEOF<DepfileParser>>;
 Depfile
 parse_depfile(std::filesystem::path const path)
 {
-  if (not is_subpathed_by(hewg_dependency_cache_path, path))
+  if (not is_subpathed_by(hewg_c_dependency_cache_path, path) and
+      not is_subpathed_by(hewg_cxx_dependency_cache_path, path))
     throw std::runtime_error("parse_depfiles given a path that doesn't point "
                              "into the dependency cache path");
 

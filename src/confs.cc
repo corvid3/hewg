@@ -5,6 +5,7 @@
 #include <scl.hh>
 
 #include "analysis.hh"
+#include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
 
@@ -38,7 +39,9 @@ project_type_from_string(std::string_view s)
 }
 
 ConfigurationFile
-get_config_file(std::filesystem::path path, std::string_view build_profile)
+get_config_file(ToplevelOptions const& options,
+                std::filesystem::path path,
+                std::string_view build_profile)
 {
   std::string config_filedata = read_file(path);
   scl::file file(config_filedata);
@@ -49,11 +52,16 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
   ConfigurationFile conf;
   scl::deserialize(conf, file);
 
-  if (not semantically_valid(conf.meta.version, this_hewg_version))
-    throw std::runtime_error(
-      std::format("hewg project requests version {}, but we have {}",
-                  version_triplet_to_string(conf.meta.version),
-                  version_triplet_to_string(this_hewg_version)));
+  if (not semantically_valid(conf.meta.version, this_hewg_version)) {
+    if (not options.force)
+      throw std::runtime_error(
+        std::format("hewg project requests version {}, but we have {}",
+                    version_triplet_to_string(conf.meta.version),
+                    version_triplet_to_string(this_hewg_version)));
+    else
+      threadsafe_print(
+        "forcing execution of build system on mismatched hewg version!");
+  }
 
   auto const& name = conf.project.name;
   static std::regex name_validation("[a-zA-Z0-9\\_]+");
@@ -86,8 +94,9 @@ get_config_file(std::filesystem::path path, std::string_view build_profile)
     FilesConf append;
     scl::deserialize(append, file, files_bp);
 
-    conf.files.source.insert(
-      conf.files.source.end(), append.source.begin(), append.source.end());
+    conf.files.cxx.insert(
+      conf.files.cxx.end(), append.cxx.begin(), append.cxx.end());
+    conf.files.c.insert(conf.files.c.end(), append.c.begin(), append.c.end());
   }
 
   return conf;

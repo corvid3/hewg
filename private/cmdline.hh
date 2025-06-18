@@ -60,6 +60,8 @@ struct BuildOptions : terse::TerminalSubcommand
 
 struct ToplevelOptions : terse::NonterminalSubcommand
 {
+  bool force = false;
+
   bool verbose_print = false;
   unsigned num_tasks = std::thread::hardware_concurrency();
   std::optional<std::string> config_file_path;
@@ -71,6 +73,11 @@ struct ToplevelOptions : terse::NonterminalSubcommand
     "C/CXX build system and package manager infrastructure";
 
   using options = std::tuple<
+    terse::Option<"force",
+                  std::nullopt,
+                  "forces the build system to try to run against a project. "
+                  "use this wisely",
+                  &ToplevelOptions::force>,
     terse::Option<"verbose",
                   'v',
                   "enables verbose printing & diag output",

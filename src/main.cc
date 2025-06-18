@@ -15,18 +15,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <terse.hh>
-#include <thread>
 #include <unistd.h>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "analysis.hh"
+#include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
-#include "compile.hh"
 #include "confs.hh"
-#include "hooks.hh"
 #include "install.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
@@ -36,60 +34,6 @@
 // i don't want to see m'code squandered...
 
 // auto const link_step_messages = { "now, let's get linking..." };
-
-static void
-check_valid_dir()
-{
-  // assert that the executing directory is at the root
-  // of a hewg project
-  if (not std::filesystem::is_regular_file(hewg_config_path))
-    throw std::runtime_error("hewg.scl not detected in current directory");
-
-  // do a quick check that src/ exists in the first place
-  if (not std::filesystem::is_directory(hewg_src_directory_path))
-    throw std::runtime_error("there should be a /src directory in the root of "
-                             "a hewg project, create it to proceed");
-}
-
-// ensures that a .hcache exists
-static void
-check_cache()
-{
-  if (std::filesystem::exists(hewg_cache_path)) {
-    if (not std::filesystem::is_directory(hewg_cache_path))
-      throw std::runtime_error(
-        "hewg cache path, .hcache, should be a directory, but is not!");
-  } else {
-    threadsafe_print("creating cache directory\n");
-    std::filesystem::create_directory(hewg_cache_path);
-  }
-
-  // these should also just always exist
-  std::filesystem::create_directory(hewg_object_cache_path);
-  std::filesystem::create_directory(hewg_dependency_cache_path);
-}
-
-// checks if source files in the same directory
-// have the same filename, even if differing extensions
-static void
-check_filename_clashes(ConfigurationFile const& conf)
-{
-  auto const filepaths = get_source_filepaths(conf);
-
-  std::vector<std::filesystem::path> paths;
-
-  for (auto b = filepaths.begin(); b != filepaths.end(); b++) {
-    auto const found = std::find_if(
-      b + 1, filepaths.end(), [&](std::filesystem::path const in) -> bool {
-        return in.parent_path() == b->parent_path() and
-               in.filename() == b->filename();
-      });
-
-    if (found != filepaths.end())
-      throw std::runtime_error(std::format(
-        "conflicting source filenames, {} & {}", b->string(), found->string()));
-  }
-}
 
 static std::string
 get_build_profile(std::span<std::string const> bares)
@@ -108,61 +52,8 @@ get_build_profile(std::span<std::string const> bares)
 }
 
 static void
-build(ThreadPool& threads,
-      std::string_view config_path,
-      BuildOptions const& build_opts,
-      std::span<std::string const> bares)
-{
-  auto const build_profile = get_build_profile(bares);
-  // basic checks
-  check_cache();
-  ConfigurationFile const config = get_config_file(config_path, build_profile);
-  check_filename_clashes(config);
-
-  trigger_prebuild_hooks(config);
-
-  // handle header projects early,
-  // to skip all of the analysis
-  if (config.meta.type == ProjectType::Headers) {
-    triggers_postbuild_hooks(config);
-    return;
-  }
-
-  std::vector<std::filesystem::path> object_files;
-
-  // just build
-  std::ranges::copy(compile_c_cxx(threads, config, build_opts),
-                    std::inserter(object_files, object_files.end()));
-
-  create_directory_checked(hewg_target_directory_path);
-  create_directory_checked(hewg_target_directory_path / build_profile);
-
-  auto const emit_dir = hewg_target_directory_path / build_profile;
-
-  switch (config.meta.type) {
-    case ProjectType::Executable:
-      link(config, build_opts, object_files, emit_dir);
-      break;
-
-    case ProjectType::StaticLibrary:
-      pack_static_library(config, object_files, emit_dir);
-      break;
-
-    case ProjectType::SharedLibrary:
-      shared_link(config, build_opts, object_files, emit_dir);
-      break;
-
-      // already handled this earlier in the function, just skip
-    case ProjectType::Headers:
-      break;
-  }
-
-  triggers_postbuild_hooks(config);
-}
-
-static void
 clean(ThreadPool&,
-      std::string_view config_path,
+      ConfigurationFile const& config,
       CleanOptions const&,
       std::span<std::string const> bares)
 {
@@ -170,16 +61,14 @@ clean(ThreadPool&,
     throw std::runtime_error(
       "clean subcommand does not take any bare arguments!");
 
-  check_cache();
-  ConfigurationFile const config =
-    get_config_file(config_path, get_build_profile(bares));
-  check_filename_clashes(config);
-
-  bool cleaned_anything = false;
+  if (not std::filesystem::exists(hewg_cache_path))
+    return;
 
   std::vector<std::filesystem::path> to_clean;
 
   auto const delete_if_exists = [&](std::filesystem::path what) {
+    if (not std::filesystem::exists(what))
+      return;
     to_clean.push_back(what);
   };
 
@@ -190,47 +79,45 @@ clean(ThreadPool&,
   delete_if_exists(hewg_builtinsym_obj_path);
 
   {
-    auto const source_filepaths = get_source_filepaths(config);
-
-    auto&& cxx_filepaths =
-      get_files_by_type(source_filepaths, FileType::CXXSource);
-    auto&& c_filepaths = get_files_by_type(source_filepaths, FileType::CSource);
-
-    std::vector<std::filesystem::path> c_cxx_sources;
-    std::ranges::set_union(cxx_filepaths,
-                           c_filepaths,
-                           std::inserter(c_cxx_sources, c_cxx_sources.end()));
-
-    std::vector<std::filesystem::path> objects;
-    std::vector<std::filesystem::path> depfiles;
-
+    auto const cxx_filepaths = get_cxx_source_filepaths(config);
+    std::vector<std::filesystem::path> objects, depfiles;
+    std::ranges::transform(cxx_filepaths,
+                           std::inserter(objects, objects.end()),
+                           object_file_for_cxx);
     std::ranges::transform(
-      c_cxx_sources, std::inserter(objects, objects.end()), object_file_for);
-
-    std::ranges::transform(
-      c_cxx_sources, std::inserter(depfiles, depfiles.end()), depfile_for);
+      cxx_filepaths, std::inserter(depfiles, depfiles.end()), depfile_for_cxx);
 
     std::erase_if(
       objects, [](auto const& sf) { return not std::filesystem::exists(sf); });
     std::erase_if(
       depfiles, [](auto const& sf) { return not std::filesystem::exists(sf); });
 
-    if (objects.empty() and depfiles.empty())
-      goto skip;
-
-    to_clean.insert(to_clean.end(),
-                    std::make_move_iterator(objects.begin()),
-                    std::make_move_iterator(objects.end()));
-
-    to_clean.insert(to_clean.end(),
-                    std::make_move_iterator(depfiles.begin()),
-                    std::make_move_iterator(depfiles.end()));
-
-    cleaned_anything = true;
-  skip:
+    for (auto const& obj : objects)
+      delete_if_exists(obj);
+    for (auto const& dep : depfiles)
+      delete_if_exists(dep);
   }
 
-  if (not cleaned_anything) {
+  {
+    auto const c_filepaths = get_c_source_filepaths(config);
+    std::vector<std::filesystem::path> objects, depfiles;
+    std::ranges::transform(
+      c_filepaths, std::inserter(objects, objects.end()), object_file_for_c);
+    std::ranges::transform(
+      c_filepaths, std::inserter(depfiles, depfiles.end()), depfile_for_c);
+
+    std::erase_if(
+      objects, [](auto const& sf) { return not std::filesystem::exists(sf); });
+    std::erase_if(
+      depfiles, [](auto const& sf) { return not std::filesystem::exists(sf); });
+
+    for (auto const& obj : objects)
+      delete_if_exists(obj);
+    for (auto const& dep : depfiles)
+      delete_if_exists(dep);
+  }
+
+  if (to_clean.empty()) {
     threadsafe_print("nothing to clean!\n");
     return;
   }
@@ -238,12 +125,7 @@ clean(ThreadPool&,
   for (auto const& sf : to_clean)
     threadsafe_print(std::format("deleting: {}\n", sf.string()));
 
-  threadsafe_print("3...\n");
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  threadsafe_print("2...\n");
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  threadsafe_print("1...\n");
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  do_terminal_countdown(3);
 
   for (auto const& sf : to_clean)
     std::filesystem::remove(sf);
@@ -293,7 +175,7 @@ init(ThreadPool&,
     config.flags.cxx_flags = { "-Wextra", "-Werror", "-std=c++23" };
     config.flags.c_flags = { "-Wextra", "-Werror", "-std=c2y" };
 
-    config.files.source = { "main.cc" };
+    config.files.cxx = { "main.cc" };
 
     scl::file file;
     scl::serialize(config, file);
@@ -311,10 +193,6 @@ int main() {
 int
 main(int argc, char** argv)
 try {
-  // this should always be the first thing ran, never move this
-  // ensures that side effects don't happen in non-hewg directories
-  check_valid_dir();
-
   auto const [tl_options, scmds, bares] = parse_cmdline(argc, argv);
 
   if (tl_options.verbose_print)
@@ -348,7 +226,11 @@ try {
       std::cout << terse::print_usage<BuildOptions>() << std::endl,
         std::exit(0);
 
-    build(thread_pool, config_path, options, bares);
+    auto const profile = get_build_profile(bares);
+    ConfigurationFile const config =
+      get_config_file(tl_options, config_path, profile);
+
+    build(thread_pool, config, options, profile);
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
 
@@ -356,7 +238,11 @@ try {
       std::cout << terse::print_usage<CleanOptions>() << std::endl,
         std::exit(0);
 
-    clean(thread_pool, config_path, options, bares);
+    auto const profile = get_build_profile(bares);
+    ConfigurationFile const config =
+      get_config_file(tl_options, config_path, profile);
+
+    clean(thread_pool, config, options, bares);
   } else if (std::holds_alternative<InitOptions>(scmds)) {
     auto options = std::get<InitOptions>(scmds);
 
@@ -372,7 +258,8 @@ try {
         std::exit(0);
 
     auto const profile = get_build_profile(bares);
-    ConfigurationFile const config = get_config_file(config_path, profile);
+    ConfigurationFile const config =
+      get_config_file(tl_options, config_path, profile);
     install(config, options, profile);
   }
 } catch (std::exception const& e) {

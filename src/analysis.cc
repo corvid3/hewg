@@ -1,19 +1,19 @@
-#include "analysis.hh"
-#include "common.hh"
-#include "confs.hh"
-#include "depfile.hh"
-#include "paths.hh"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <format>
-#include <iterator>
 #include <jayson.hh>
 #include <optional>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <system_error>
 #include <vector>
+
+#include "analysis.hh"
+#include "common.hh"
+#include "confs.hh"
+#include "depfile.hh"
+#include "paths.hh"
 
 FileType
 translate_filename_to_filetype(std::filesystem::path const s)
@@ -35,16 +35,15 @@ translate_filename_to_filetype(std::filesystem::path const s)
   throw std::runtime_error("unknown filetype in sources");
 }
 
-// TODO: i can memoize this
 std::vector<std::filesystem::path>
-get_source_filepaths(ConfigurationFile const& conf)
+get_cxx_source_filepaths(ConfigurationFile const& conf)
 {
   std::vector<std::filesystem::path> paths;
 
-  for (auto const& file : conf.files.source) {
-    auto const filepath = hewg_src_directory_path / file;
+  for (auto const& file : conf.files.cxx) {
+    auto const filepath = hewg_cxx_src_directory_path / file;
 
-    if (not is_subpathed_by(hewg_src_directory_path, filepath))
+    if (not is_subpathed_by(hewg_cxx_src_directory_path, filepath))
       throw std::runtime_error(
         std::format("source file <{}> is outside of the source directory!",
                     filepath.string()));
@@ -55,36 +54,107 @@ get_source_filepaths(ConfigurationFile const& conf)
   return paths;
 }
 
-std::filesystem::path
-object_file_for(std::filesystem::path in)
+std::vector<std::filesystem::path>
+get_c_source_filepaths(ConfigurationFile const& conf)
 {
-  if (not is_subpathed_by(hewg_src_directory_path, in))
+  std::vector<std::filesystem::path> paths;
+
+  for (auto const& file : conf.files.c) {
+    auto const filepath = hewg_c_src_directory_path / file;
+
+    if (not is_subpathed_by(hewg_c_src_directory_path, filepath))
+      throw std::runtime_error(
+        std::format("source file <{}> is outside of the source directory!",
+                    filepath.string()));
+
+    paths.push_back(filepath);
+  }
+
+  return paths;
+}
+
+std::string
+static_library_name_for_project(ConfigurationFile const& config)
+{
+  return std::format("lib{}.a", config.project.name);
+}
+
+std::string
+dynamic_library_name_for_project(ConfigurationFile const& config)
+{
+  return std::format("lib{}.so", config.project.name);
+}
+
+std::filesystem::path
+get_target_folder_for_build_profile(std::string_view const profile)
+{
+  return hewg_target_directory_path / profile;
+}
+
+std::filesystem::path
+object_file_for_cxx(std::filesystem::path in)
+{
+  if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
     throw std::runtime_error(
       std::format("object_file_for given a path that is not "
                   "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_src_directory_path.string(),
+                  hewg_cxx_src_directory_path.string(),
                   in.string()));
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_src_directory_path);
-  auto new_path = hewg_object_cache_path / relative_to_src;
+    std::filesystem::relative(in, hewg_cxx_src_directory_path);
+  auto new_path = hewg_cxx_object_cache_path / relative_to_src;
 
   return new_path.replace_extension(".o");
 }
 
 std::filesystem::path
-depfile_for(std::filesystem::path in)
+object_file_for_c(std::filesystem::path in)
 {
-  if (not is_subpathed_by(hewg_src_directory_path, in))
+  if (not is_subpathed_by(hewg_c_src_directory_path, in))
     throw std::runtime_error(
-      std::format("depfile_for given a path that is not "
+      std::format("object_file_for given a path that is not "
                   "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_src_directory_path.string(),
+                  hewg_c_src_directory_path.string(),
                   in.string()));
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_src_directory_path);
-  auto new_path = hewg_dependency_cache_path / relative_to_src;
+    std::filesystem::relative(in, hewg_c_src_directory_path);
+  auto new_path = hewg_c_object_cache_path / relative_to_src;
+
+  return new_path.replace_extension(".o");
+}
+
+std::filesystem::path
+depfile_for_cxx(std::filesystem::path in)
+{
+  if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
+    throw std::runtime_error(
+      std::format("depfile_for given a path that is not "
+                  "subpathed by the src directory, owner = <{}>, child = <{}>",
+                  hewg_cxx_src_directory_path.string(),
+                  in.string()));
+
+  auto const relative_to_src =
+    std::filesystem::relative(in, hewg_cxx_src_directory_path);
+  auto new_path = hewg_cxx_dependency_cache_path / relative_to_src;
+
+  return new_path.replace_extension(".d");
+}
+
+std::filesystem::path
+depfile_for_c(std::filesystem::path in)
+{
+  if (not is_subpathed_by(hewg_c_src_directory_path, in))
+    throw std::runtime_error(
+      std::format("depfile_for given a path that is not "
+                  "subpathed by the src directory, owner = <{}>, child = <{}>",
+                  hewg_c_src_directory_path.string(),
+                  in.string()));
+
+  auto const relative_to_src =
+    std::filesystem::relative(in, hewg_c_src_directory_path);
+  auto new_path = hewg_c_dependency_cache_path / relative_to_src;
 
   return new_path.replace_extension(".d");
 }
@@ -130,13 +200,13 @@ get_modification_date_of_file(std::filesystem::path const p)
     .count();
 }
 
-std::vector<Depfile>
-get_dependencies(std::span<std::filesystem::path const> source_files)
+std::vector<Depfile> static get_dependencies_for_c(
+  std::span<std::filesystem::path const> source_files)
 {
   std::vector<Depfile> files;
 
   for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for(source_file);
+    auto const depfile_path = depfile_for_c(source_file);
 
     if (not std::filesystem::exists(depfile_path))
       continue;
@@ -147,23 +217,33 @@ get_dependencies(std::span<std::filesystem::path const> source_files)
   return files;
 };
 
-std::vector<std::filesystem::path>
-mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
+std::vector<Depfile> static get_dependencies_for_cxx(
+  std::span<std::filesystem::path const> source_files)
 {
-  auto&& cxx_source_files = get_files_by_type(files, FileType::CXXSource);
-  auto&& c_source_files = get_files_by_type(files, FileType::CSource);
+  std::vector<Depfile> files;
 
-  std::vector<std::filesystem::path> collect;
-  std::ranges::set_union(
-    cxx_source_files, c_source_files, std::inserter(collect, collect.end()));
+  for (auto const& source_file : source_files) {
+    auto const depfile_path = depfile_for_cxx(source_file);
 
+    if (not std::filesystem::exists(depfile_path))
+      continue;
+
+    files.push_back(parse_depfile(depfile_path));
+  }
+
+  return files;
+};
+
+static std::vector<std::filesystem::path>
+mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
+                             std::span<Depfile const> depfiles)
+{
   std::vector<std::filesystem::path> rebuilds;
-  std::vector<Depfile> const depfiles = get_dependencies(collect);
 
   // lazily find
   // those files which don't have a depfile (thus uncompiled)
   // yes this sucks. i fix it later
-  for (auto const& file : collect) {
+  for (auto const& file : sources) {
     for (auto const& df : depfiles)
       if (std::filesystem::absolute(file) ==
           std::filesystem::absolute(df.src_path))
@@ -181,27 +261,34 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> files)
       continue;
     }
 
-    // std::stringstream fmt;
-    // fmt << std::format(
-    //   "object: {}, date: {}\n", depfile.obj_path.string(), *obj_md);
-
     for (auto const& dep : depfile.dependencies) {
       auto const dep_md = get_modification_date_of_file(dep);
 
       if (not dep_md)
         continue;
 
-      // fmt << std::format("depfile: {}, date: {}\n", dep.string(), *dep_md);
-
       if (*dep_md > obj_md) {
         rebuilds.push_back(depfile.src_path);
         break;
       }
     }
-    // threadsafe_print(fmt.str(), '\n');
   }
 
   return rebuilds;
+}
+
+std::vector<std::filesystem::path>
+mark_c_files_for_rebuild(std::span<std::filesystem::path const> sources)
+{
+  std::vector<Depfile> const depfiles = get_dependencies_for_c(sources);
+  return mark_c_cxx_files_for_rebuild(sources, depfiles);
+}
+
+std::vector<std::filesystem::path>
+mark_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources)
+{
+  std::vector<Depfile> const depfiles = get_dependencies_for_cxx(sources);
+  return mark_c_cxx_files_for_rebuild(sources, depfiles);
 }
 
 bool
