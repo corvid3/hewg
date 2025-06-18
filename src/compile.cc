@@ -248,10 +248,15 @@ compile_c_cxx(ThreadPool& pool,
 
     std::ranges::transform(c_filepaths,
                            std::inserter(c_objects, c_objects.end()),
-                           object_file_for_c);
+                           [=](std::filesystem::path const& path) {
+                             return object_file_for_c(path, PIC);
+                           });
+
     std::ranges::transform(cxx_filepaths,
                            std::inserter(cxx_objects, cxx_objects.end()),
-                           object_file_for_cxx);
+                           [=](std::filesystem::path const& path) {
+                             return object_file_for_cxx(path, PIC);
+                           });
 
     std::vector<std::filesystem::path> objects;
     std::ranges::set_union(
@@ -262,8 +267,8 @@ compile_c_cxx(ThreadPool& pool,
     objects;
   });
 
-  auto const c_rebuilds = mark_c_files_for_rebuild(c_filepaths);
-  auto const cxx_rebuilds = mark_cxx_files_for_rebuild(cxx_filepaths);
+  auto const c_rebuilds = mark_c_files_for_rebuild(c_filepaths, PIC);
+  auto const cxx_rebuilds = mark_cxx_files_for_rebuild(cxx_filepaths, PIC);
 
   auto const c_flags = generate_c_flags(config, release, PIC);
   auto const cxx_flags = generate_cxx_flags(config, release, PIC);
@@ -290,14 +295,14 @@ compile_c_cxx(ThreadPool& pool,
 
   {
     for (auto const& rebuild : c_rebuilds)
-      start_c_compile_task(pool,
-                           config,
-                           rebuild,
-                           c_flags +
-                             generate_file_flags(rebuild,
-                                                 depfile_for_c(rebuild),
-                                                 object_file_for_c(rebuild)),
-                           failed_compiles);
+      start_c_compile_task(
+        pool,
+        config,
+        rebuild,
+        c_flags + generate_file_flags(rebuild,
+                                      depfile_for_c(rebuild, PIC),
+                                      object_file_for_c(rebuild, PIC)),
+        failed_compiles);
 
     for (auto const& rebuild : cxx_rebuilds)
       start_cxx_compile_task(
@@ -305,8 +310,8 @@ compile_c_cxx(ThreadPool& pool,
         config,
         rebuild,
         cxx_flags + generate_file_flags(rebuild,
-                                        depfile_for_cxx(rebuild),
-                                        object_file_for_cxx(rebuild)),
+                                        depfile_for_cxx(rebuild, PIC),
+                                        object_file_for_cxx(rebuild, PIC)),
         failed_compiles);
 
     pool.block_until_finished();

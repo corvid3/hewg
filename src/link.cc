@@ -78,14 +78,16 @@ link_executable(ConfigurationFile const& config,
 void
 pack_static_library(ConfigurationFile const& config,
                     std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path output_directory)
+                    std::filesystem::path output_directory,
+                    bool const PIC)
 {
   if (not std::filesystem::is_directory(output_directory))
     throw std::runtime_error(
       "output_directory in pack_static_library() isn't a directory");
 
   std::filesystem::path const outfile =
-    output_directory / std::format("lib{}.a", config.project.name);
+    (PIC ? output_directory / std::format("lib{}.a", config.project.name)
+         : output_directory / std::format("PIClib{}.a", config.project.name));
 
   std::vector<std::string> commands;
   commands.push_back("rcs");

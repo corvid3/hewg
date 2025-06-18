@@ -92,7 +92,7 @@ get_target_folder_for_build_profile(std::string_view const profile)
 }
 
 std::filesystem::path
-object_file_for_cxx(std::filesystem::path in)
+object_file_for_cxx(std::filesystem::path in, bool const pic)
 {
   if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
     throw std::runtime_error(
@@ -103,13 +103,16 @@ object_file_for_cxx(std::filesystem::path in)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_cxx_src_directory_path);
-  auto new_path = hewg_cxx_object_cache_path / relative_to_src;
+
+  auto new_path =
+    (!pic ? hewg_cxx_object_cache_path : hewg_cxx_pic_object_cache_path) /
+    relative_to_src;
 
   return new_path.replace_extension(".o");
 }
 
 std::filesystem::path
-object_file_for_c(std::filesystem::path in)
+object_file_for_c(std::filesystem::path in, bool const pic)
 {
   if (not is_subpathed_by(hewg_c_src_directory_path, in))
     throw std::runtime_error(
@@ -120,13 +123,15 @@ object_file_for_c(std::filesystem::path in)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_c_src_directory_path);
-  auto new_path = hewg_c_object_cache_path / relative_to_src;
+  auto new_path =
+    (!pic ? hewg_c_object_cache_path : hewg_c_pic_object_cache_path) /
+    relative_to_src;
 
   return new_path.replace_extension(".o");
 }
 
 std::filesystem::path
-depfile_for_cxx(std::filesystem::path in)
+depfile_for_cxx(std::filesystem::path in, bool const pic)
 {
   if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
     throw std::runtime_error(
@@ -137,13 +142,15 @@ depfile_for_cxx(std::filesystem::path in)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_cxx_src_directory_path);
-  auto new_path = hewg_cxx_dependency_cache_path / relative_to_src;
+  auto new_path = (!pic ? hewg_cxx_dependency_cache_path
+                        : hewg_cxx_pic_dependency_cache_path) /
+                  relative_to_src;
 
   return new_path.replace_extension(".d");
 }
 
 std::filesystem::path
-depfile_for_c(std::filesystem::path in)
+depfile_for_c(std::filesystem::path in, bool const pic)
 {
   if (not is_subpathed_by(hewg_c_src_directory_path, in))
     throw std::runtime_error(
@@ -154,7 +161,10 @@ depfile_for_c(std::filesystem::path in)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_c_src_directory_path);
-  auto new_path = hewg_c_dependency_cache_path / relative_to_src;
+
+  auto new_path =
+    (!pic ? hewg_c_dependency_cache_path : hewg_c_pic_dependency_cache_path) /
+    relative_to_src;
 
   return new_path.replace_extension(".d");
 }
@@ -201,12 +211,13 @@ get_modification_date_of_file(std::filesystem::path const p)
 }
 
 std::vector<Depfile> static get_dependencies_for_c(
-  std::span<std::filesystem::path const> source_files)
+  std::span<std::filesystem::path const> source_files,
+  bool const pic)
 {
   std::vector<Depfile> files;
 
   for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_c(source_file);
+    auto const depfile_path = depfile_for_c(source_file, pic);
 
     if (not std::filesystem::exists(depfile_path))
       continue;
@@ -218,12 +229,13 @@ std::vector<Depfile> static get_dependencies_for_c(
 };
 
 std::vector<Depfile> static get_dependencies_for_cxx(
-  std::span<std::filesystem::path const> source_files)
+  std::span<std::filesystem::path const> source_files,
+  bool const pic)
 {
   std::vector<Depfile> files;
 
   for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_cxx(source_file);
+    auto const depfile_path = depfile_for_cxx(source_file, pic);
 
     if (not std::filesystem::exists(depfile_path))
       continue;
@@ -278,16 +290,18 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
 }
 
 std::vector<std::filesystem::path>
-mark_c_files_for_rebuild(std::span<std::filesystem::path const> sources)
+mark_c_files_for_rebuild(std::span<std::filesystem::path const> sources,
+                         bool pic)
 {
-  std::vector<Depfile> const depfiles = get_dependencies_for_c(sources);
+  std::vector<Depfile> const depfiles = get_dependencies_for_c(sources, pic);
   return mark_c_cxx_files_for_rebuild(sources, depfiles);
 }
 
 std::vector<std::filesystem::path>
-mark_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources)
+mark_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
+                           bool pic)
 {
-  std::vector<Depfile> const depfiles = get_dependencies_for_cxx(sources);
+  std::vector<Depfile> const depfiles = get_dependencies_for_cxx(sources, pic);
   return mark_c_cxx_files_for_rebuild(sources, depfiles);
 }
 
