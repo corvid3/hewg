@@ -12,7 +12,8 @@ link_executable(ConfigurationFile const& config,
 void
 pack_static_library(ConfigurationFile const& config,
                     std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path output_directory);
+                    std::filesystem::path output_directory,
+                    bool const PIC);
 
 void
 shared_link(ConfigurationFile const& config,

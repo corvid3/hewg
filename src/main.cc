@@ -53,7 +53,7 @@ get_build_profile(std::span<std::string const> bares)
 
 static void
 clean(ThreadPool&,
-      ConfigurationFile const& config,
+      ConfigurationFile const&,
       CleanOptions const&,
       std::span<std::string const> bares)
 {
@@ -78,44 +78,15 @@ clean(ThreadPool&,
   delete_if_exists(hewg_builtinsym_src_path);
   delete_if_exists(hewg_builtinsym_obj_path);
 
-  {
-    auto const cxx_filepaths = get_cxx_source_filepaths(config);
-    std::vector<std::filesystem::path> objects, depfiles;
-    std::ranges::transform(cxx_filepaths,
-                           std::inserter(objects, objects.end()),
-                           object_file_for_cxx);
-    std::ranges::transform(
-      cxx_filepaths, std::inserter(depfiles, depfiles.end()), depfile_for_cxx);
+  delete_if_exists(hewg_c_object_cache_path);
+  delete_if_exists(hewg_c_pic_object_cache_path);
+  delete_if_exists(hewg_cxx_object_cache_path);
+  delete_if_exists(hewg_cxx_pic_object_cache_path);
 
-    std::erase_if(
-      objects, [](auto const& sf) { return not std::filesystem::exists(sf); });
-    std::erase_if(
-      depfiles, [](auto const& sf) { return not std::filesystem::exists(sf); });
-
-    for (auto const& obj : objects)
-      delete_if_exists(obj);
-    for (auto const& dep : depfiles)
-      delete_if_exists(dep);
-  }
-
-  {
-    auto const c_filepaths = get_c_source_filepaths(config);
-    std::vector<std::filesystem::path> objects, depfiles;
-    std::ranges::transform(
-      c_filepaths, std::inserter(objects, objects.end()), object_file_for_c);
-    std::ranges::transform(
-      c_filepaths, std::inserter(depfiles, depfiles.end()), depfile_for_c);
-
-    std::erase_if(
-      objects, [](auto const& sf) { return not std::filesystem::exists(sf); });
-    std::erase_if(
-      depfiles, [](auto const& sf) { return not std::filesystem::exists(sf); });
-
-    for (auto const& obj : objects)
-      delete_if_exists(obj);
-    for (auto const& dep : depfiles)
-      delete_if_exists(dep);
-  }
+  delete_if_exists(hewg_c_dependency_cache_path);
+  delete_if_exists(hewg_c_pic_dependency_cache_path);
+  delete_if_exists(hewg_cxx_dependency_cache_path);
+  delete_if_exists(hewg_cxx_pic_dependency_cache_path);
 
   if (to_clean.empty()) {
     threadsafe_print("nothing to clean!\n");
@@ -125,10 +96,10 @@ clean(ThreadPool&,
   for (auto const& sf : to_clean)
     threadsafe_print(std::format("deleting: {}\n", sf.string()));
 
-  do_terminal_countdown(3);
+  do_terminal_countdown(5);
 
   for (auto const& sf : to_clean)
-    std::filesystem::remove(sf);
+    std::filesystem::remove_all(sf);
 }
 
 static void

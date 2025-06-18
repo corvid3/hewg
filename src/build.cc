@@ -5,6 +5,7 @@
 #include "hooks.hh"
 #include "link.hh"
 #include "paths.hh"
+#include "thread_pool.hh"
 
 // ensures that a .hcache exists
 static void
@@ -24,6 +25,11 @@ check_cache()
   std::filesystem::create_directory(hewg_cxx_dependency_cache_path);
   std::filesystem::create_directory(hewg_c_object_cache_path);
   std::filesystem::create_directory(hewg_c_dependency_cache_path);
+
+  std::filesystem::create_directory(hewg_cxx_pic_object_cache_path);
+  std::filesystem::create_directory(hewg_cxx_pic_dependency_cache_path);
+  std::filesystem::create_directory(hewg_c_pic_object_cache_path);
+  std::filesystem::create_directory(hewg_c_pic_dependency_cache_path);
 }
 
 static void
@@ -36,6 +42,24 @@ build_executable(ThreadPool& threads,
     compile_c_cxx(threads, config, build_opts.release, false);
 
   link_executable(config, build_opts, object_files, emit_dir);
+
+  if (build_opts.release)
+    run_command("strip", "-s", (emit_dir / config.project.name).string());
+}
+
+static void
+build_static_library(ThreadPool& threads,
+                     ConfigurationFile const& config,
+                     BuildOptions const& build_opts,
+                     std::filesystem::path const& emit_dir)
+{
+  auto const object_files =
+    compile_c_cxx(threads, config, build_opts.release, false);
+  auto const object_files_pic =
+    compile_c_cxx(threads, config, build_opts.release, true);
+
+  pack_static_library(config, object_files, emit_dir, false);
+  pack_static_library(config, object_files, emit_dir, true);
 }
 
 void
@@ -61,9 +85,9 @@ build(ThreadPool& threads,
       build_executable(threads, config, build_opts, emit_dir);
       break;
 
-    case ProjectType::StaticLibrary: {
-      threadsafe_print("static library building not yet supported");
-    } break;
+    case ProjectType::StaticLibrary:
+      build_static_library(threads, config, build_opts, emit_dir);
+      break;
 
     case ProjectType::SharedLibrary: {
       threadsafe_print("shared library building not yet supported");
