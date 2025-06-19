@@ -64,8 +64,7 @@ get_config_file(ToplevelOptions const& options,
   }
 
   auto const& name = conf.project.name;
-  static std::regex name_validation("[a-zA-Z0-9\\_]+");
-  if (not std::regex_search(name, name_validation))
+  if (not check_valid_project_identifier(name))
     throw std::runtime_error(
       std::format("project name <{}> is invalid; it must be alphanumeric "
                   "including underscores",

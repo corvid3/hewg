@@ -31,6 +31,7 @@ cxx = {
     "link.cc"
 
     "build.cc"
+    "init.cc"
     "hooks.cc"
 
     "packages.cc"

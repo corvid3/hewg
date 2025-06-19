@@ -53,8 +53,11 @@ build_static_library(ThreadPool& threads,
                      BuildOptions const& build_opts,
                      std::filesystem::path const& emit_dir)
 {
+  threadsafe_print("building non-PIC library code...");
   auto const object_files =
     compile_c_cxx(threads, config, build_opts.release, false);
+
+  threadsafe_print("building PIC library code...");
   auto const object_files_pic =
     compile_c_cxx(threads, config, build_opts.release, true);
 

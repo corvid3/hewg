@@ -215,3 +215,8 @@ get_home_directory();
 // use this whenever you're deleting files, probably
 void
 do_terminal_countdown(int const num);
+
+// used for project name
+// regex: [a-zA-Z0-9_]+
+bool
+check_valid_project_identifier(std::string_view what);

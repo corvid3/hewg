@@ -25,6 +25,7 @@
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
+#include "init.hh"
 #include "install.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
@@ -102,65 +103,6 @@ clean(ThreadPool&,
     std::filesystem::remove_all(sf);
 }
 
-static void
-init(ThreadPool&,
-     std::string_view,
-     InitOptions const&,
-     std::span<std::string const> bares)
-{
-  auto const this_dir = std::filesystem::current_path();
-
-  if (not std::filesystem::is_empty(this_dir))
-    throw std::runtime_error(
-      "init command can only be ran on empty directories!");
-
-  std::filesystem::create_directory("src");
-  std::filesystem::create_directory("include");
-  std::filesystem::create_directory("private");
-
-  {
-    if (bares.size() != 2)
-      throw std::runtime_error(
-        "init command takes two bare arguments, the first must be the type of "
-        "the project and the second must be the name of the project");
-
-    auto const type = bares[0];
-    auto const name = bares[1];
-
-    auto const project_type = project_type_from_string(type)
-                                .or_else([&]() -> std::optional<ProjectType> {
-                                  throw std::runtime_error(std::format(
-                                    "unknown project type {}", type));
-                                  std::unreachable();
-                                })
-                                .value();
-
-    ConfigurationFile config;
-
-    config.meta.type = project_type;
-    config.meta.version = { 0, 0, 0 };
-
-    config.project.version = { 0, 0, 0 };
-    config.project.name = name;
-
-    config.flags.cxx_flags = { "-Wextra", "-Werror", "-std=c++23" };
-    config.flags.c_flags = { "-Wextra", "-Werror", "-std=c2y" };
-
-    config.files.cxx = { "main.cc" };
-
-    scl::file file;
-    scl::serialize(config, file);
-
-    std::ofstream("./hewg.scl") << file.serialize();
-  }
-
-  std::ofstream("./src/main.cc") << R"(#include<iostream>
-
-int main() {
-  std::cout << "hello, world!";    
-})";
-}
-
 int
 main(int argc, char** argv)
 try {
@@ -220,7 +162,7 @@ try {
     if (options.help)
       std::cout << terse::print_usage<InitOptions>() << std::endl, std::exit(0);
 
-    init(thread_pool, config_path, options, bares);
+    init(options, bares);
   } else if (std::holds_alternative<InstallOptions>(scmds)) {
     auto options = std::get<InstallOptions>(scmds);
 
