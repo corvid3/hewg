@@ -88,10 +88,7 @@ do_terminal_countdown(int const num)
 bool
 check_valid_project_identifier(std::string_view name)
 {
-  static std::regex name_validation("[a-zA-Z0-9\\_]+");
+  static std::regex name_validation("[a-zA-Z0-9\\_\\-]+");
 
-  if (not std::regex_search(name.begin(), name.end(), name_validation))
-    return false;
-
-  return true;
+  return std::regex_search(name.begin(), name.end(), name_validation);
 }
