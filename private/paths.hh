@@ -12,21 +12,10 @@ auto const hewg_cache_path = std::filesystem::current_path() / ".hcache";
 auto const hewg_hook_path = std::filesystem::current_path() / "hooks";
 auto const hewg_hook_cache_path = hewg_cache_path / "hooks.json";
 
-auto const hewg_builtinsym_cache_path = hewg_cache_path / "hewgsyms.json";
+// auto const hewg_builtinsym_cache_path = hewg_cache_path / "hewgsyms.json";
 auto const hewg_builtinsym_src_path = hewg_cache_path / "hewgsyms.c";
 auto const hewg_builtinsym_obj_path = hewg_cache_path / "hewgsyms.o";
-
-auto const hewg_cxx_dependency_cache_path = hewg_cache_path / "deps";
-auto const hewg_c_dependency_cache_path = hewg_cache_path / "cdeps";
-
-auto const hewg_cxx_pic_dependency_cache_path = hewg_cache_path / "deps-pic";
-auto const hewg_c_pic_dependency_cache_path = hewg_cache_path / "cdeps-pic";
-
-auto const hewg_cxx_object_cache_path = hewg_cache_path / "objects";
-auto const hewg_c_object_cache_path = hewg_cache_path / "cobjects";
-
-auto const hewg_cxx_pic_object_cache_path = hewg_cache_path / "objects-pic";
-auto const hewg_c_pic_object_cache_path = hewg_cache_path / "cobjects-pic";
+auto const hewg_builtinsym_obj_pic_path = hewg_cache_path / "hewgsyms-pic.o";
 
 auto const hewg_modification_date_cache_path =
   hewg_cache_path / "modification_dates.json";

@@ -4,6 +4,7 @@
 
 #include "analysis.hh"
 #include "build.hh"
+#include "cmdline.hh"
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
@@ -93,7 +94,7 @@ build_executable(ThreadPool& threads,
   auto object_files =
     build_c_cxx(threads, config, tools, cache, build_opts.release, false);
 
-  object_files.push_back(compile_hewgsym(config, tools));
+  object_files.push_back(compile_hewgsym(config, tools, false));
 
   link_executable(config, tools, build_opts, object_files, emit_dir);
 
@@ -119,6 +120,22 @@ build_static_library(ThreadPool& threads [[maybe_unused]],
 
   // pack_static_library(config, object_files, emit_dir, false);
   // pack_static_library(config, object_files, emit_dir, true);
+}
+
+static void
+build_shared_library(ThreadPool& threads,
+                     ConfigurationFile const& config,
+                     ToolFile const& tools,
+                     BuildOptions const& build_opts,
+                     std::string_view build_profile,
+                     std::filesystem::path const& emit_dir)
+{
+  auto const cache = get_cache_folder(build_profile, build_opts.release, true);
+
+  auto object_files =
+    build_c_cxx(threads, config, tools, cache, build_opts.release, true);
+  object_files.push_back(compile_hewgsym(config, tools, true));
+  shared_link(config, tools, build_opts, object_files, emit_dir);
 }
 
 void
@@ -152,6 +169,8 @@ build(ThreadPool& threads,
 
     case ProjectType::SharedLibrary: {
       threadsafe_print("shared library building not yet supported");
+      build_shared_library(
+        threads, config, tools, build_opts, build_profile, emit_dir);
     } break;
 
       // header only projects

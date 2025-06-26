@@ -191,54 +191,29 @@ emit_symcache_contents(std::string_view package_name,
   return out;
 }
 
-// returns true if requesting a rebuild of the builtin symbol file
-static bool
-check_symcache(ConfigurationFile const& config)
-{
-  if (not std::filesystem::exists(hewg_builtinsym_cache_path)) {
-    std::ofstream(hewg_builtinsym_cache_path)
-      << jayson::serialize(config.project.version).serialize();
-
-    std::ofstream(hewg_builtinsym_src_path)
-      << emit_symcache_contents(config.project.name, config.project.version);
-
-    return true;
-  } else {
-    std::stringstream ss;
-    ss << std::ifstream(hewg_builtinsym_cache_path).rdbuf();
-
-    jayson::val v = jayson::val::parse(std::move(ss).str());
-    version_triplet trip;
-    jayson::deserialize(v, trip);
-
-    // if the version has changed, request a rebuild
-    if (trip != config.project.version) {
-      std::ofstream(hewg_builtinsym_src_path)
-        << emit_symcache_contents(config.project.name, config.project.version);
-
-      std::ofstream(hewg_builtinsym_cache_path)
-        << jayson::serialize(config.project.version).serialize();
-
-      return true;
-    } else
-      return false;
-  }
-}
-
 std::filesystem::path
-compile_hewgsym(ConfigurationFile const& config, ToolFile const& tools)
+compile_hewgsym(ConfigurationFile const& config,
+                ToolFile const& tools,
+                bool PIC)
 {
-  if (check_symcache(config)) {
-    threadsafe_print("updating hewgsym...");
-    run_command(tools.cc,
-                hewg_builtinsym_src_path.string(),
-                "-O2",
-                "-c",
-                "-o",
-                hewg_builtinsym_obj_path.string());
-  }
+  auto const object_file_name =
+    PIC ? hewg_builtinsym_obj_pic_path : hewg_builtinsym_obj_path;
 
-  return hewg_builtinsym_obj_path;
+  std::ofstream(hewg_builtinsym_src_path)
+    << emit_symcache_contents(config.project.name, config.project.version);
+
+  std::vector<std::string> args;
+  args.push_back("-O2");
+  args.push_back("-c");
+  args.push_back(hewg_builtinsym_src_path);
+  args.push_back("-o");
+  args.push_back(object_file_name);
+  if (PIC)
+    args.push_back("-fPIC");
+
+  run_command(tools.cc, args);
+
+  return object_file_name;
 }
 
 static auto

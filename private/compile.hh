@@ -39,4 +39,6 @@ compile_c(ThreadPool& pool,
 // builds the special hewg symbols object file
 // and returns a path to it
 std::filesystem::path
-compile_hewgsym(ConfigurationFile const& config, ToolFile const& tools);
+compile_hewgsym(ConfigurationFile const& config,
+                ToolFile const& tools,
+                bool PIC);

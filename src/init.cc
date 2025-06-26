@@ -105,7 +105,7 @@ static void
 init_shared(std::filesystem::path install_directory,
             std::string_view project_name)
 {
-  auto const file = create_scl_file(std::string(project_name), "shared", "");
+  auto const file = create_scl_file(std::string(project_name), "dynlib", "");
 
   std::ofstream(install_directory / "hewg.scl") << file;
 }
@@ -161,7 +161,7 @@ init(InitOptions const& options, std::span<std::string const> bares)
   if (not project_type)
     throw std::runtime_error(
       "project type provided is not valid; it must be one of <executable>, "
-      "<library>, <shared>, <headers>");
+      "<library>, <dynlib>, <headers>");
 
   auto const install_directory =
     options.directory
