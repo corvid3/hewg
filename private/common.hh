@@ -197,7 +197,10 @@ is_subpathed_by(std::filesystem::path const owning_directory,
 {
   if (not std::filesystem::is_directory(owning_directory))
     throw std::runtime_error(
-      "is_subpathed_by is given a non-directory as owner");
+      std::format("is_subpathed_by is given a non-directory as owner, owner: "
+                  "<{}>, child: <{}>",
+                  owning_directory.string(),
+                  child.string()));
 
   // TODO: this doesn't work if owning_directory has a trailing /
   // because it introduces a new empty component at the end...
