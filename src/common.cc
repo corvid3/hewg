@@ -48,6 +48,33 @@ get_home_directory()
   return home_path;
 }
 
+bool
+is_subpathed_by(std::filesystem::path const owning_directory,
+                std::filesystem::path const child)
+{
+  if (not std::filesystem::is_directory(owning_directory))
+    throw std::runtime_error(
+      std::format("is_subpathed_by is given a non-directory as owner, owner: "
+                  "<{}>, child: <{}>",
+                  owning_directory.string(),
+                  child.string()));
+
+  // TODO: this doesn't work if owning_directory has a trailing /
+  // because it introduces a new empty component at the end...
+  // hmm
+
+  auto const owning_directory_full =
+    std::filesystem::absolute(owning_directory);
+  auto const child_full = std::filesystem::absolute(child);
+
+  auto const m = std::mismatch(owning_directory_full.begin(),
+                               owning_directory_full.end(),
+                               child_full.begin(),
+                               child_full.end());
+
+  return m.first == owning_directory_full.end();
+}
+
 void
 do_terminal_countdown(int const num)
 {

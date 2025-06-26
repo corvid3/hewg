@@ -142,13 +142,14 @@ get_cache_folder(std::string_view build_profile, bool release, bool pic)
 
   auto const folder = hewg_cache_path / "incremental" / inner;
 
+  create_directory_checked(folder);
+
   if (not is_subpathed_by(hewg_cache_path, folder))
     throw std::runtime_error(
       std::format("cache folder <{}> is not subpathed by <{}>????",
                   hewg_cache_path.string(),
                   folder.string()));
 
-  create_directory_checked(folder);
   create_directory_checked(folder / "cxx_objects");
   create_directory_checked(folder / "c_objects");
   create_directory_checked(folder / "cxx_depends");
