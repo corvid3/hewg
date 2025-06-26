@@ -6,7 +6,7 @@
 static auto
 generate_link_flags(ConfigurationFile const&,
                     ToolFile const& tools,
-                    bool const is_release,
+                    bool const,
                     std::span<std::filesystem::path const> object_files,
                     std::filesystem::path const output_filepath)
 {
@@ -22,8 +22,8 @@ generate_link_flags(ConfigurationFile const&,
 
   args.push_back(std::format("-fuse-ld={}", tools.ld));
 
-  if (is_release)
-    args.push_back("-flto");
+  // if (is_release)
+  //   args.push_back("-flto");
 
   // TODO: add options for libraries
 
@@ -39,6 +39,7 @@ get_library_flags(ConfigurationFile const& config,
   (void)ignore_static_libraries;
 
   std::vector<std::string> args;
+  args.push_back("-L/usr/local/lib");
 
   for (auto const& native_library : config.libs.native)
     args.push_back(std::format("-l{}", native_library));

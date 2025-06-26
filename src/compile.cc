@@ -59,14 +59,18 @@ constexpr auto generate_c_flags =
   [](ConfigurationFile const& config,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.c.flags;
+  return generate_common_flags(is_release, PIC) + config.c.flags +
+         std::vector{ std::format(
+           "-std={}", get_c_standard_string(config.c.std.value_or(17))) };
 };
 
 constexpr auto generate_cxx_flags =
   [](ConfigurationFile const& config,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.cxx.flags;
+  return generate_common_flags(is_release, PIC) + config.cxx.flags +
+         std::vector{ std::format(
+           "-std={}", get_cxx_standard_string(config.cxx.std.value_or(20))) };
 };
 
 // static void

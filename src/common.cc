@@ -13,7 +13,7 @@ void
 create_directory_checked(std::filesystem::path const what)
 {
   if (not std::filesystem::exists(what))
-    std::filesystem::create_directory(what);
+    std::filesystem::create_directories(what);
   if (not std::filesystem::is_directory(what))
     throw std::runtime_error(std::format(
       "{} must be a directory", std::filesystem::relative(what).string()));

@@ -65,14 +65,15 @@ public:
   auto add_job(auto fn)
   {
     auto task = new Task(fn);
-    auto&& future = task->m_promise.get_future();
+    auto future = task->m_promise.get_future();
 
     {
       std::scoped_lock lock(m_mutex);
       m_tasks.push(std::unique_ptr<TaskBase>(task));
+      m_queueCondition.notify_one();
     }
 
-    return future;
+    return std::move(future);
   }
 };
 

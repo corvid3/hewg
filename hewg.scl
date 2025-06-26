@@ -1,12 +1,12 @@
 [hewg]
-version = { 0 2 1 }
+version = { 0 3 0 }
 type = "executable"
 # changes the default profile to build for
 # useful when defaulting to crosscomp for e.g. riscv
 # profile_override = "linux"
 
 [project]
-version = { 0 2 1 }
+version = { 0 3 0 }
 name = "hewg"
 description = "compiler build system and management software"
 authors = { "crow" }
@@ -68,7 +68,7 @@ sources =
 
 [c]
 flags = { "-Wextra" "-Werror" }
-std = 20
+std = 17
 sources = 
 {
     "bootstrap_version.c"

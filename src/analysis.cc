@@ -73,7 +73,8 @@ get_cxx_standard_string(int std)
       return "c++23";
 
     default:
-      throw std::runtime_error(std::format("unrecognized std <{}> for C", std));
+      throw std::runtime_error(
+        std::format("unrecognized std <{}> for C++", std));
   }
 }
 

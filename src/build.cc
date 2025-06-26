@@ -52,6 +52,7 @@ build_c_cxx(ThreadPool& threads,
 {
   auto [cxx_object_files, cxx_futures] =
     compile_cxx(threads, config, tools, cache, release, pic);
+
   auto [c_object_files, c_futures] =
     compile_c(threads, config, tools, cache, release, pic);
 
