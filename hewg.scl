@@ -1,24 +1,49 @@
 [hewg]
-version = { 0 2 0 }
+version = { 0 2 1 }
 type = "executable"
+# changes the default profile to build for
+# useful when defaulting to crosscomp for e.g. riscv
+# profile_override = "linux"
 
 [project]
-version = { 0 2 0 }
+version = { 0 2 1 }
 name = "hewg"
 description = "compiler build system and management software"
 authors = { "crow" }
 
-[flags]
-cxx = { "-Wextra" "-Werror" "-std=c++23" }
+# [tools]
+# name = "linux-gcc"
+
+# [tools.mingw]
+# 
+
+[debug.default]
+opt_level = 0
+lto = false
+strip = false
+
+[release.default]
+opt_level = 2
+lto = true
+strip = true
 
 [libraries]
 native = { "scl" }
 
-[hooks.prebuild]
-[hooks.postbuild]
+# [[internal]]
+# name = "scl"
+# org = "crow"
+# version = { 0 1 0 }
+# exact = false
 
-[files]
-cxx = {
+# default values for cxx
+# build profile subtables
+# may override these values
+[cxx]
+flags = { "-Wextra" "-Werror" }
+std = 23
+sources = 
+{
     "main.cc"
 
     "common.cc"
@@ -41,6 +66,11 @@ cxx = {
     "depfile.cc"
 }
 
-c = {
+[c]
+flags = { "-Wextra" "-Werror" }
+std = 20
+sources = 
+{
     "bootstrap_version.c"
 }
+

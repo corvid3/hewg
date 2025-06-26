@@ -58,6 +58,7 @@ SRCS=src/main.cc \
 	src/thread_pool.cc \
 	src/build.cc \
 	src/link.cc \
+	src/init.cc \
 	src/depfile.cc \
 	src/cmdline.cc \
 	src/install.cc \

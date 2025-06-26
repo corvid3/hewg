@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <latch>
 #include <mutex>
 #include <queue>
@@ -16,13 +17,36 @@ thread_local inline int thread_id = MAIN_THREAD_ID;
 
 class ThreadPool
 {
+  struct TaskBase
+  {
+    TaskBase() = default;
+    virtual ~TaskBase() = default;
+
+    virtual void operator()() = 0;
+  };
+
+  template<typename T>
+  struct Task : TaskBase
+  {
+    Task(T fn)
+      : m_fn(fn)
+    {
+    }
+
+    void operator()() final { m_promise.set_value(m_fn()); }
+
+    T m_fn;
+    std::promise<decltype(std::declval<T>()())> m_promise;
+  };
+
   std::vector<std::thread> m_threads;
 
   std::condition_variable m_queueCondition;
   std::mutex m_mutex;
-  std::queue<task_t> m_tasks;
-  std::queue<std::latch> m_taskLatches;
+  std::queue<std::unique_ptr<TaskBase>> m_tasks;
   bool m_closing = false;
+
+  void internal_add_job(TaskBase* base);
 
 public:
   ThreadPool(const ThreadPool&) = delete;
@@ -35,8 +59,21 @@ public:
 
   // empties the task queue, without finishing
   void drain();
-  void block_until_finished();
-  void add_job(task_t func);
+
+  // responsibility of lifetime
+  // for task moves into ThreadPool
+  auto add_job(auto fn)
+  {
+    auto task = new Task(fn);
+    auto&& future = task->m_promise.get_future();
+
+    {
+      std::scoped_lock lock(m_mutex);
+      m_tasks.push(std::unique_ptr<TaskBase>(task));
+    }
+
+    return future;
+  }
 };
 
 // returns the exit code & stdout + stderr

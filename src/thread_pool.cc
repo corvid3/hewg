@@ -16,7 +16,7 @@ ThreadPool::ThreadPool(int const num_threads)
   // to the main thread
   auto const thread_dispatch = [&](thread_id_t const this_thread_id) {
     try {
-      task_t task = nullptr;
+      std::unique_ptr<TaskBase> task;
       thread_id = this_thread_id;
 
       for (;;) {
@@ -31,11 +31,11 @@ ThreadPool::ThreadPool(int const num_threads)
           if (m_closing)
             break;
 
-          task = m_tasks.front();
+          task = std::move(m_tasks.front());
           m_tasks.pop();
         }
 
-        task();
+        (*task.get())();
       }
     } catch (std::exception const& e) {
       threadsafe_print(e.what(), '\n');
@@ -65,56 +65,33 @@ ThreadPool::drain()
     m_tasks.pop();
 }
 
-void
-ThreadPool::block_until_finished()
-{
-  auto get_next_latch = [&]() -> std::latch& {
-    std::scoped_lock lock(this->m_mutex);
-    return this->m_taskLatches.front();
-  };
+// void
+// ThreadPool::block_until_finished()
+// {
+//   auto get_next_latch = [&]() -> std::latch& {
+//     std::scoped_lock lock(this->m_mutex);
+//     return this->m_taskLatches.front();
+//   };
 
-  auto pop_latch = [&]() -> bool {
-    std::scoped_lock lock(this->m_mutex);
-    this->m_taskLatches.pop();
-    return this->m_taskLatches.empty();
-  };
+//   auto pop_latch = [&]() -> bool {
+//     std::scoped_lock lock(this->m_mutex);
+//     this->m_taskLatches.pop();
+//     return this->m_taskLatches.empty();
+//   };
 
-  {
-    std::scoped_lock lock(this->m_mutex);
-    if (this->m_taskLatches.empty())
-      return;
-  }
+//   {
+//     std::scoped_lock lock(this->m_mutex);
+//     if (this->m_taskLatches.empty())
+//       return;
+//   }
 
-  for (;;) {
-    auto& latch = get_next_latch();
-    latch.wait();
-    if (pop_latch())
-      break;
-  }
-}
-
-void
-ThreadPool::add_job(task_t func)
-{
-  {
-    // LPT for anyone reading,
-    // use a reference_wrapper when passing a reference to a
-    // lambda. if using a raw reference, the lambda will take
-    // a reference to the reference, rather than just copying
-    // the reference value itself.
-    // this caused a bit of confusion here.
-
-    std::scoped_lock lock(m_mutex);
-    std::reference_wrapper<std::latch> latch = this->m_taskLatches.emplace(1);
-    m_tasks.push([func, latch]() {
-      func();
-      latch.get().count_down();
-    });
-  }
-
-  m_queueCondition.notify_one();
-  // threadsafe_print("added task\n");
-}
+//   for (;;) {
+//     auto& latch = get_next_latch();
+//     latch.wait();
+//     if (pop_latch())
+//       break;
+//   }
+// }
 
 std::pair<int, std::string>
 run_command(std::string const command, std::span<std::string const> args)

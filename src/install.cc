@@ -130,11 +130,17 @@ install_library(ConfigurationFile const& config,
 {
   install_headers(config, profile, install_dir);
 
-  auto const lib_filename = static_library_name_for_project(config);
+  auto const lib_filename = static_library_name_for_project(config, false);
+  auto const lib_pie_filename = static_library_name_for_project(config, true);
 
   std::filesystem::copy(get_target_folder_for_build_profile(profile) /
                           lib_filename,
                         install_dir / lib_filename,
+                        std::filesystem::copy_options::update_existing);
+
+  std::filesystem::copy(get_target_folder_for_build_profile(profile) /
+                          lib_pie_filename,
+                        install_dir / lib_pie_filename,
                         std::filesystem::copy_options::update_existing);
 }
 
@@ -178,8 +184,3 @@ install(ConfigurationFile const& config,
       break;
   }
 }
-
-// std::filesystem::path
-// get_package_by_name(std::string_view name)
-// {
-// }

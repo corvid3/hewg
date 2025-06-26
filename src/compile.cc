@@ -1,9 +1,12 @@
 #include <algorithm>
 #include <chrono>
+#include <expected>
 #include <filesystem>
 #include <format>
+#include <future>
 #include <iterator>
 #include <jayson.hh>
+#include <optional>
 #include <span>
 
 #include "analysis.hh"
@@ -56,14 +59,14 @@ constexpr auto generate_c_flags =
   [](ConfigurationFile const& config,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.flags.c_flags;
+  return generate_common_flags(is_release, PIC) + config.c.flags;
 };
 
 constexpr auto generate_cxx_flags =
   [](ConfigurationFile const& config,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.flags.cxx_flags;
+  return generate_common_flags(is_release, PIC) + config.cxx.flags;
 };
 
 // static void
@@ -88,56 +91,76 @@ constexpr auto generate_cxx_flags =
 
 // will set successful_compile to false
 // if the task failed
-static void
+static std::future<std::optional<std::string>>
 start_cxx_compile_task(ThreadPool& thread_pool,
-                       ConfigurationFile const& config,
+                       ConfigurationFile const&,
+                       ToolFile const& tool_file,
                        std::filesystem::path const source_filepath,
-                       std::vector<std::string> args,
-                       atomic_vec<std::string>& failed_compiles)
+                       std::filesystem::path const object_filepath,
+                       std::filesystem::path const depend_filepath,
+                       std::vector<std::string> common_flags)
 {
-  thread_pool.add_job(
-    [source_filepath, args, &config, &thread_pool, &failed_compiles]() {
-      auto const relative_path =
-        std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
+  return thread_pool.add_job([source_filepath,
+                              object_filepath,
+                              depend_filepath,
+                              common_flags,
+                              &tool_file,
+                              &thread_pool]() -> std::optional<std::string> {
+    auto const relative_source_path =
+      std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
 
-      threadsafe_print(
-        std::format("compiling CXX file: <{}>\n", relative_path.string()));
+    threadsafe_print(
+      std::format("compiling CXX file: <{}>\n", relative_source_path.string()));
 
-      auto const [exit_code, what] =
-        run_command(config.tools.cxx_tool.value_or("c++"), args);
+    auto const [exit_code, what] = run_command(
+      tool_file.cxx,
+      common_flags +
+        generate_file_flags(source_filepath, depend_filepath, object_filepath));
 
-      if (exit_code != 0) {
-        failed_compiles.push_back(relative_path);
-        thread_pool.drain();
-        // write_error_file(source_filepath, what);
-      }
-    });
+    if (exit_code != 0) {
+      thread_pool.drain();
+      return relative_source_path.string();
+      // write_error_file(source_filepath, what);
+    }
+
+    return std::nullopt;
+  });
 }
 
-static void
+static std::future<std::optional<std::string>>
 start_c_compile_task(ThreadPool& thread_pool,
-                     ConfigurationFile const& config,
+                     ConfigurationFile const&,
+                     ToolFile const& tool_file,
                      std::filesystem::path const source_filepath,
-                     std::vector<std::string> args,
-                     atomic_vec<std::string>& failed_compiles)
+                     std::filesystem::path const object_filepath,
+                     std::filesystem::path const depend_filepath,
+                     std::vector<std::string> common_flags)
 {
-  thread_pool.add_job(
-    [source_filepath, args, &config, &thread_pool, &failed_compiles]() {
-      auto const relative_path =
-        std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
+  return thread_pool.add_job([source_filepath,
+                              object_filepath,
+                              depend_filepath,
+                              common_flags,
+                              &tool_file,
+                              &thread_pool]() -> std::optional<std::string> {
+    auto const relative_source_path =
+      std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
 
-      threadsafe_print(
-        std::format("compiling C file: <{}>\n", relative_path.string()));
+    threadsafe_print(
+      std::format("compiling C file: <{}>\n", relative_source_path.string()));
 
-      auto const [exit_code, what] =
-        run_command(config.tools.c_tool.value_or("cc"), args);
+    auto const [exit_code, what] = run_command(
+      tool_file.cc,
+      common_flags +
+        generate_file_flags(source_filepath, depend_filepath, object_filepath));
 
-      if (exit_code != 0) {
-        failed_compiles.push_back(relative_path);
-        thread_pool.drain();
-        // write_error_file(source_filepath, what);
-      }
-    });
+    if (exit_code != 0) {
+      thread_pool.drain();
+      return relative_source_path.string();
+      // write_error_file(source_filepath, what);
+    }
+
+    return std::nullopt;
+  });
 }
 
 static std::string
@@ -198,17 +221,20 @@ check_symcache(ConfigurationFile const& config)
   }
 }
 
-static auto
-ensure_symcache(ConfigurationFile const& config)
+std::filesystem::path
+compile_hewgsym(ConfigurationFile const& config, ToolFile const& tools)
 {
   if (check_symcache(config)) {
-    run_command("cc",
+    threadsafe_print("updating hewgsym...");
+    run_command(tools.cc,
                 hewg_builtinsym_src_path.string(),
                 "-O2",
                 "-c",
                 "-o",
                 hewg_builtinsym_obj_path.string());
   }
+
+  return hewg_builtinsym_obj_path;
 }
 
 static auto
@@ -233,47 +259,31 @@ ensure_object_output_paths_exist(
   just with PIC
 */
 
-std::vector<std::filesystem::path>
-compile_c_cxx(ThreadPool& pool,
-              ConfigurationFile const& config,
-              bool const release,
-              bool const PIC)
+// starts compilation for cxx
+// without blocking
+// make sure you synchronize the threads after this!
+std::pair<std::vector<std::filesystem::path>,
+          std::vector<std::future<std::optional<std::string>>>>
+compile_cxx(ThreadPool& threads,
+            ConfigurationFile const& config,
+            ToolFile const& tools,
+            std::filesystem::path const& cache_folder,
+            bool const release,
+            bool const PIC)
 {
-  auto const c_filepaths = get_c_source_filepaths(config);
   auto const cxx_filepaths = get_cxx_source_filepaths(config);
+  std::vector<std::filesystem::path> cxx_objects;
+  std::ranges::transform(cxx_filepaths,
+                         std::inserter(cxx_objects, cxx_objects.end()),
+                         [=](std::filesystem::path const& path) {
+                           return object_file_for_cxx(cache_folder, path);
+                         });
 
-  auto const object_files = ({
-    std::vector<std::filesystem::path> c_objects;
-    std::vector<std::filesystem::path> cxx_objects;
+  ensure_object_output_paths_exist(cxx_objects);
 
-    std::ranges::transform(c_filepaths,
-                           std::inserter(c_objects, c_objects.end()),
-                           [=](std::filesystem::path const& path) {
-                             return object_file_for_c(path, PIC);
-                           });
-
-    std::ranges::transform(cxx_filepaths,
-                           std::inserter(cxx_objects, cxx_objects.end()),
-                           [=](std::filesystem::path const& path) {
-                             return object_file_for_cxx(path, PIC);
-                           });
-
-    std::vector<std::filesystem::path> objects;
-    std::ranges::set_union(
-      c_objects, cxx_objects, std::inserter(objects, objects.end()));
-
-    objects.push_back(hewg_builtinsym_obj_path);
-
-    objects;
-  });
-
-  auto const c_rebuilds = mark_c_files_for_rebuild(c_filepaths, PIC);
-  auto const cxx_rebuilds = mark_cxx_files_for_rebuild(cxx_filepaths, PIC);
-
-  auto const c_flags = generate_c_flags(config, release, PIC);
+  auto const cxx_rebuilds =
+    mark_cxx_files_for_rebuild(cache_folder, cxx_filepaths);
   auto const cxx_flags = generate_cxx_flags(config, release, PIC);
-
-  atomic_vec<std::string> failed_compiles;
 
   {
     std::string cxx_flags_fmt;
@@ -281,49 +291,68 @@ compile_c_cxx(ThreadPool& pool,
       cxx_flags_fmt += in, cxx_flags_fmt += ' ';
     });
 
+    threadsafe_print_verbose(std::format("CXX flags: {}", cxx_flags_fmt));
+  }
+
+  std::vector<std::future<std::optional<std::string>>> awaits;
+
+  for (auto const& rebuild : cxx_rebuilds) {
+    auto const object_filepath = object_file_for_cxx(cache_folder, rebuild);
+    auto const depend_filepath = depfile_for_cxx(cache_folder, rebuild);
+
+    awaits.push_back(start_cxx_compile_task(threads,
+                                            config,
+                                            tools,
+                                            rebuild,
+                                            object_filepath,
+                                            depend_filepath,
+                                            cxx_flags));
+  }
+
+  return std::pair{ cxx_objects, std::move(awaits) };
+}
+
+std::pair<std::vector<std::filesystem::path>,
+          std::vector<std::future<std::optional<std::string>>>>
+compile_c(ThreadPool& threads,
+          ConfigurationFile const& config,
+          ToolFile const& tools,
+          std::filesystem::path const& cache_folder,
+          bool const release,
+          bool const PIC)
+{
+  auto const c_filepaths = get_c_source_filepaths(config);
+  std::vector<std::filesystem::path> c_objects;
+
+  std::ranges::transform(c_filepaths,
+                         std::inserter(c_objects, c_objects.end()),
+                         [=](std::filesystem::path const& path) {
+                           return object_file_for_c(cache_folder, path);
+                         });
+
+  ensure_object_output_paths_exist(c_objects);
+
+  auto const c_rebuilds = mark_c_files_for_rebuild(cache_folder, c_filepaths);
+  auto c_flags = generate_c_flags(config, release, PIC);
+
+  {
     std::string c_flags_fmt;
     std::ranges::for_each(c_flags, [&](std::string_view in) {
       c_flags_fmt += in, c_flags_fmt += ' ';
     });
 
-    threadsafe_print_verbose(std::format("CXX flags: {}", cxx_flags_fmt));
     threadsafe_print_verbose(std::format("C flags: {}", c_flags_fmt));
   }
 
-  ensure_symcache(config);
-  ensure_object_output_paths_exist(object_files);
+  std::vector<std::future<std::optional<std::string>>> awaits;
 
-  {
-    for (auto const& rebuild : c_rebuilds)
-      start_c_compile_task(
-        pool,
-        config,
-        rebuild,
-        c_flags + generate_file_flags(rebuild,
-                                      depfile_for_c(rebuild, PIC),
-                                      object_file_for_c(rebuild, PIC)),
-        failed_compiles);
+  for (auto const& rebuild : c_rebuilds) {
+    auto const object_file = object_file_for_c(cache_folder, rebuild);
+    auto const depend_file = depfile_for_c(cache_folder, rebuild);
 
-    for (auto const& rebuild : cxx_rebuilds)
-      start_cxx_compile_task(
-        pool,
-        config,
-        rebuild,
-        cxx_flags + generate_file_flags(rebuild,
-                                        depfile_for_cxx(rebuild, PIC),
-                                        object_file_for_cxx(rebuild, PIC)),
-        failed_compiles);
-
-    pool.block_until_finished();
+    awaits.push_back(start_c_compile_task(
+      threads, config, tools, rebuild, object_file, depend_file, c_flags));
   }
 
-  if (failed_compiles.size() > 0) {
-    threadsafe_print("errors in files:\n");
-    failed_compiles.map(
-      [](auto const& file) { threadsafe_print("\t", file, '\n'); });
-
-    throw std::runtime_error("fatal errors when compiling cxx source files");
-  }
-
-  return object_files;
+  return { c_objects, std::move(awaits) };
 }

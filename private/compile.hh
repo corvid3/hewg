@@ -1,6 +1,8 @@
 #pragma once
 
+#include <expected>
 #include <filesystem>
+#include <future>
 
 #include "confs.hh"
 #include "thread_pool.hh"
@@ -15,8 +17,26 @@
 // handles incremental compilation
 // common flags should be a set of flags
 // passed to
-std::vector<std::filesystem::path>
-compile_c_cxx(ThreadPool& threads,
-              ConfigurationFile const& config,
-              bool const release,
-              bool const PIC);
+
+std::pair<std::vector<std::filesystem::path>,
+          std::vector<std::future<std::optional<std::string>>>>
+compile_cxx(ThreadPool& pool,
+            ConfigurationFile const& config,
+            ToolFile const& tools,
+            std::filesystem::path const& cache_folder,
+            bool const release,
+            bool const PIC);
+
+std::pair<std::vector<std::filesystem::path>,
+          std::vector<std::future<std::optional<std::string>>>>
+compile_c(ThreadPool& pool,
+          ConfigurationFile const& config,
+          ToolFile const& tools,
+          std::filesystem::path const& cache_folder,
+          bool const release,
+          bool const PIC);
+
+// builds the special hewg symbols object file
+// and returns a path to it
+std::filesystem::path
+compile_hewgsym(ConfigurationFile const& config, ToolFile const& tools);

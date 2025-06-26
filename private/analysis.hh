@@ -23,6 +23,11 @@ enum class FileType
 FileType
 translate_filename_to_filetype(std::filesystem::path const s);
 
+std::string
+get_c_standard_string(int std);
+std::string
+get_cxx_standard_string(int std);
+
 std::vector<std::filesystem::path>
 get_cxx_source_filepaths(ConfigurationFile const&);
 
@@ -30,28 +35,33 @@ std::vector<std::filesystem::path>
 get_c_source_filepaths(ConfigurationFile const&);
 
 std::string
-static_library_name_for_project(ConfigurationFile const& config);
+static_library_name_for_project(ConfigurationFile const& config,
+                                bool const PIE);
 std::string
 dynamic_library_name_for_project(ConfigurationFile const& config);
 
 std::filesystem::path
 get_target_folder_for_build_profile(std::string_view const profile);
 
+std::filesystem::path
+get_cache_folder(std::string_view build_profile, bool release, bool pic);
+
 // converts a source-path source file
 // to it's cache-path object file
 std::filesystem::path
-object_file_for_cxx(std::filesystem::path in, bool pic);
+object_file_for_cxx(std::filesystem::path cache_folder,
+                    std::filesystem::path in);
 
 std::filesystem::path
-object_file_for_c(std::filesystem::path in, bool pic);
+object_file_for_c(std::filesystem::path cache_folder, std::filesystem::path in);
 
 // converts a source-path source file
 // to it's cache-path dependency file
 std::filesystem::path
-depfile_for_cxx(std::filesystem::path in, bool pic);
+depfile_for_cxx(std::filesystem::path cache_folder, std::filesystem::path in);
 
 std::filesystem::path
-depfile_for_c(std::filesystem::path in, bool pic);
+depfile_for_c(std::filesystem::path cache_folder, std::filesystem::path in);
 
 // converts the list of source files in the config
 // into a list of files for each filetype
@@ -67,12 +77,12 @@ get_modification_date_of_file(std::filesystem::path const p);
 // that should be rebuilt, based on
 // modification date and include dependencies
 std::vector<std::filesystem::path>
-mark_c_files_for_rebuild(std::span<std::filesystem::path const> sources,
-                         bool pic);
+mark_c_files_for_rebuild(std::filesystem::path cache_folder,
+                         std::span<std::filesystem::path const> sources);
 
 std::vector<std::filesystem::path>
-mark_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
-                           bool pic);
+mark_cxx_files_for_rebuild(std::filesystem::path cache_folder,
+                           std::span<std::filesystem::path const> sources);
 
 bool
 semantically_valid(version_triplet const request_for,

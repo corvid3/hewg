@@ -1,0 +1,8 @@
+[cxx]
+cmd = "x86_64-pc-linux-gnu-c++"
+
+[c]
+cmd = "x86_64-pc-linux-gnu-cc"
+
+[ld]
+cmd = "mold"

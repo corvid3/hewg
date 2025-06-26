@@ -40,11 +40,7 @@ static std::string
 get_build_profile(std::span<std::string const> bares)
 {
   if (bares.size() == 0) {
-#ifdef __linux__
-    return "linux";
-#endif
-
-    // TODO: implement mingw
+    return "default";
   } else if (bares.size() == 1)
     return bares[0];
   else

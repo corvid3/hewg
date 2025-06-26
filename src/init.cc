@@ -10,12 +10,12 @@
 #include "init.hh"
 
 auto static const scl_template = R"([hewg]
-version = %VERSION%
-type = %TYPE%
+version = { %VERSION% }
+type = "%TYPE%"
 
 [project]
 version = { 0 0 0 }
-name = %NAME%
+name = "%NAME%"
 description = ""
 authors = { }
 
@@ -29,7 +29,7 @@ native = { }
 [hooks.postbuild]
 
 [files]
-cxx = { %DEFAULTFILE% }
+cxx = { "%DEFAULTFILE%" }
 
 c = { }
 )";

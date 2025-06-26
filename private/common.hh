@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -91,10 +92,20 @@ append_vec(std::vector<L>& into, std::ranges::range auto const& rhs)
 
 template<typename L>
 decltype(auto)
-operator+(std::vector<L> lhs, std::vector<L> rhs)
+operator+(std::vector<L>&& lhs, std::vector<L>&& rhs)
 {
-  lhs.insert(lhs.end(), rhs.begin(), rhs.end());
-  return lhs;
+  lhs.insert(
+    lhs.end(), std::move_iterator(rhs.begin()), std::move_iterator(rhs.end()));
+  return std::move(lhs);
+}
+
+template<typename L>
+decltype(auto)
+operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
+{
+  std::vector<L> out = lhs;
+  out.insert(out.end(), rhs.begin(), rhs.end());
+  return out;
 }
 
 static inline std::mutex stdout_mutex;

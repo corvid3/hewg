@@ -35,12 +35,54 @@ translate_filename_to_filetype(std::filesystem::path const s)
   throw std::runtime_error("unknown filetype in sources");
 }
 
+std::string
+get_c_standard_string(int std)
+{
+  switch (std) {
+    case 99:
+      return "c99";
+    case 11:
+      return "c11";
+    case 17:
+      return "c17";
+    case 23:
+      return "c23";
+
+    default:
+      throw std::runtime_error(std::format("unrecognized std <{}> for C", std));
+  }
+}
+
+std::string
+get_cxx_standard_string(int std)
+{
+  switch (std) {
+    case 98:
+      return "c++98";
+    case 3:
+      return "c++03";
+    case 11:
+      return "c++11";
+    case 14:
+      return "c++14";
+    case 17:
+      return "c++17";
+    case 20:
+      return "c++20";
+    case 23:
+      return "c++23";
+
+    default:
+      throw std::runtime_error(std::format("unrecognized std <{}> for C", std));
+  }
+}
+
 std::vector<std::filesystem::path>
 get_cxx_source_filepaths(ConfigurationFile const& conf)
 {
   std::vector<std::filesystem::path> paths;
 
-  for (auto const& file : conf.files.cxx) {
+  for (auto const& file : conf.cxx.sources) {
     auto const filepath = hewg_cxx_src_directory_path / file;
 
     if (not is_subpathed_by(hewg_cxx_src_directory_path, filepath))
@@ -59,7 +101,7 @@ get_c_source_filepaths(ConfigurationFile const& conf)
 {
   std::vector<std::filesystem::path> paths;
 
-  for (auto const& file : conf.files.c) {
+  for (auto const& file : conf.c.sources) {
     auto const filepath = hewg_c_src_directory_path / file;
 
     if (not is_subpathed_by(hewg_c_src_directory_path, filepath))
@@ -74,9 +116,9 @@ get_c_source_filepaths(ConfigurationFile const& conf)
 }
 
 std::string
-static_library_name_for_project(ConfigurationFile const& config)
+static_library_name_for_project(ConfigurationFile const& config, bool const PIE)
 {
-  return std::format("lib{}.a", config.project.name);
+  return std::format("lib{}{}.a", config.project.name, PIE ? "-PIE" : "");
 }
 
 std::string
@@ -92,7 +134,31 @@ get_target_folder_for_build_profile(std::string_view const profile)
 }
 
 std::filesystem::path
-object_file_for_cxx(std::filesystem::path in, bool const pic)
+get_cache_folder(std::string_view build_profile, bool release, bool pic)
+{
+  auto const inner = std::format(
+    "{}{}{}", build_profile, pic ? "-pic" : "", release ? "-rel" : "");
+
+  auto const folder = hewg_cache_path / "incremental" / inner;
+
+  if (not is_subpathed_by(hewg_cache_path, folder))
+    throw std::runtime_error(
+      std::format("cache folder <{}> is not subpathed by <{}>????",
+                  hewg_cache_path.string(),
+                  folder.string()));
+
+  create_directory_checked(folder);
+  create_directory_checked(folder / "cxx_objects");
+  create_directory_checked(folder / "c_objects");
+  create_directory_checked(folder / "cxx_depends");
+  create_directory_checked(folder / "c_depends");
+
+  return hewg_cache_path / "incremental" / inner;
+}
+
+std::filesystem::path
+object_file_for_cxx(std::filesystem::path cache_folder,
+                    std::filesystem::path in)
 {
   if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
     throw std::runtime_error(
@@ -104,15 +170,12 @@ object_file_for_cxx(std::filesystem::path in, bool const pic)
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_cxx_src_directory_path);
 
-  auto new_path =
-    (!pic ? hewg_cxx_object_cache_path : hewg_cxx_pic_object_cache_path) /
-    relative_to_src;
-
-  return new_path.replace_extension(".o");
+  return (cache_folder / "cxx_objects" / relative_to_src)
+    .replace_extension(".o");
 }
 
 std::filesystem::path
-object_file_for_c(std::filesystem::path in, bool const pic)
+object_file_for_c(std::filesystem::path cache_folder, std::filesystem::path in)
 {
   if (not is_subpathed_by(hewg_c_src_directory_path, in))
     throw std::runtime_error(
@@ -123,15 +186,12 @@ object_file_for_c(std::filesystem::path in, bool const pic)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_c_src_directory_path);
-  auto new_path =
-    (!pic ? hewg_c_object_cache_path : hewg_c_pic_object_cache_path) /
-    relative_to_src;
 
-  return new_path.replace_extension(".o");
+  return (cache_folder / "c_objects" / relative_to_src).replace_extension(".o");
 }
 
 std::filesystem::path
-depfile_for_cxx(std::filesystem::path in, bool const pic)
+depfile_for_cxx(std::filesystem::path cache_folder, std::filesystem::path in)
 {
   if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
     throw std::runtime_error(
@@ -142,15 +202,13 @@ depfile_for_cxx(std::filesystem::path in, bool const pic)
 
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_cxx_src_directory_path);
-  auto new_path = (!pic ? hewg_cxx_dependency_cache_path
-                        : hewg_cxx_pic_dependency_cache_path) /
-                  relative_to_src;
 
-  return new_path.replace_extension(".d");
+  return (cache_folder / "cxx_depends" / relative_to_src)
+    .replace_extension(".d");
 }
 
 std::filesystem::path
-depfile_for_c(std::filesystem::path in, bool const pic)
+depfile_for_c(std::filesystem::path cache_folder, std::filesystem::path in)
 {
   if (not is_subpathed_by(hewg_c_src_directory_path, in))
     throw std::runtime_error(
@@ -162,11 +220,7 @@ depfile_for_c(std::filesystem::path in, bool const pic)
   auto const relative_to_src =
     std::filesystem::relative(in, hewg_c_src_directory_path);
 
-  auto new_path =
-    (!pic ? hewg_c_dependency_cache_path : hewg_c_pic_dependency_cache_path) /
-    relative_to_src;
-
-  return new_path.replace_extension(".d");
+  return (cache_folder / "c_depends" / relative_to_src).replace_extension(".d");
 }
 
 // TODO: i can memoize this, do that later
@@ -211,13 +265,13 @@ get_modification_date_of_file(std::filesystem::path const p)
 }
 
 std::vector<Depfile> static get_dependencies_for_c(
-  std::span<std::filesystem::path const> source_files,
-  bool const pic)
+  std::filesystem::path const cache_folder,
+  std::span<std::filesystem::path const> source_files)
 {
   std::vector<Depfile> files;
 
   for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_c(source_file, pic);
+    auto const depfile_path = depfile_for_c(cache_folder, source_file);
 
     if (not std::filesystem::exists(depfile_path))
       continue;
@@ -229,13 +283,13 @@ std::vector<Depfile> static get_dependencies_for_c(
 };
 
 std::vector<Depfile> static get_dependencies_for_cxx(
-  std::span<std::filesystem::path const> source_files,
-  bool const pic)
+  std::filesystem::path const cache_folder,
+  std::span<std::filesystem::path const> source_files)
 {
   std::vector<Depfile> files;
 
   for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_cxx(source_file, pic);
+    auto const depfile_path = depfile_for_cxx(cache_folder, source_file);
 
     if (not std::filesystem::exists(depfile_path))
       continue;
@@ -290,18 +344,20 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
 }
 
 std::vector<std::filesystem::path>
-mark_c_files_for_rebuild(std::span<std::filesystem::path const> sources,
-                         bool pic)
+mark_c_files_for_rebuild(std::filesystem::path const cache_folder,
+                         std::span<std::filesystem::path const> sources)
 {
-  std::vector<Depfile> const depfiles = get_dependencies_for_c(sources, pic);
+  std::vector<Depfile> const depfiles =
+    get_dependencies_for_c(cache_folder, sources);
   return mark_c_cxx_files_for_rebuild(sources, depfiles);
 }
 
 std::vector<std::filesystem::path>
-mark_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
-                           bool pic)
+mark_cxx_files_for_rebuild(std::filesystem::path const cache_folder,
+                           std::span<std::filesystem::path const> sources)
 {
-  std::vector<Depfile> const depfiles = get_dependencies_for_cxx(sources, pic);
+  std::vector<Depfile> const depfiles =
+    get_dependencies_for_cxx(cache_folder, sources);
   return mark_c_cxx_files_for_rebuild(sources, depfiles);
 }
 

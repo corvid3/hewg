@@ -3,6 +3,7 @@
 #include "cmdline.hh"
 #include <filesystem>
 #include <jayson.hh>
+#include <optional>
 #include <scl.hh>
 #include <string>
 #include <tuple>
@@ -51,14 +52,28 @@ using ProjectTypeEnumDescriptor =
                              project_type_from_string,
                              project_type_to_string>;
 
+struct Dependency
+{
+  std::string name;
+  version_triplet version;
+  bool exact = false;
+
+  using scl_fields = std::tuple<scl::field<&Dependency::name, "name">,
+                                scl::field<&Dependency::version, "version">,
+                                scl::field<&Dependency::exact, "exact", false>>;
+};
+
 struct MetaConf
 {
   version_triplet version;
   ProjectType type;
 
+  std::optional<std::string> profile_override;
+
   using scl_fields = std::tuple<
     scl::field<&MetaConf::version, "version">,
-    scl::enum_field<&MetaConf::type, "type", ProjectTypeEnumDescriptor>>;
+    scl::enum_field<&MetaConf::type, "type", ProjectTypeEnumDescriptor>,
+    scl::field<&MetaConf::profile_override, "profile_override", false>>;
 };
 
 struct ProjectConf
@@ -81,47 +96,34 @@ struct ProjectConf
                jayson::obj_field<"authors", &ProjectConf::authors>>;
 };
 
-struct FlagsConf
+struct CXXConf
 {
-  std::vector<std::string> cxx_flags;
-  std::vector<std::string> c_flags;
-  std::vector<std::string> ld_flags;
+  std::optional<int> std;
+  std::vector<std::string> flags;
+  std::vector<std::string> sources;
 
-  using scl_fields = std::tuple<scl::field<&FlagsConf::cxx_flags, "cxx", false>,
-                                scl::field<&FlagsConf::c_flags, "c", false>,
-                                scl::field<&FlagsConf::ld_flags, "ld", false>>;
+  using scl_fields = std::tuple<scl::field<&CXXConf::std, "std", false>,
+                                scl::field<&CXXConf::flags, "flags">,
+                                scl::field<&CXXConf::sources, "sources">>;
 };
 
-struct FilesConf
+struct CConf
 {
-  std::vector<std::string> cxx;
-  std::vector<std::string> c;
+  std::optional<int> std;
+  std::vector<std::string> flags;
+  std::vector<std::string> sources;
 
-  using scl_fields = std::tuple<scl::field<&FilesConf::cxx, "cxx">,
-                                scl::field<&FilesConf::c, "c">>;
+  using scl_fields = std::tuple<scl::field<&CConf::std, "std", false>,
+                                scl::field<&CConf::flags, "flags">,
+                                scl::field<&CConf::sources, "sources">>;
 };
-
-struct ToolsConf
-{
-  std::optional<std::string> cxx_tool;
-  std::optional<std::string> c_tool;
-  std::optional<std::string> ld_tool;
-
-  using scl_fields = std::tuple<scl::field<&ToolsConf::cxx_tool, "cxx", false>,
-                                scl::field<&ToolsConf::c_tool, "c", false>,
-                                scl::field<&ToolsConf::ld_tool, "ld", false>>;
-};
-
-using PackageDep = std::tuple<std::string, version_triplet>;
 
 struct LibraryConf
 {
-  std::vector<PackageDep> packages = {};
   std::vector<std::string> native = {};
 
   using scl_fields =
-    std::tuple<scl::field<&LibraryConf::packages, "packages", false>,
-               scl::field<&LibraryConf::native, "native", false>>;
+    std::tuple<scl::field<&LibraryConf::native, "native", false>>;
 };
 
 struct HooksConf
@@ -134,16 +136,30 @@ struct HooksConf
                scl::field<&HooksConf::always, "always", false>>;
 };
 
+struct ToolProfile
+{
+  std::string tool_profile_name;
+  using scl_fields =
+    std::tuple<scl::field<&ToolProfile::tool_profile_name, "name">>;
+};
+
+ToolProfile
+get_default_tool_profile();
+
 struct ConfigurationFile
 {
   MetaConf meta;
   ProjectConf project;
+  ToolProfile tools = get_default_tool_profile();
 
-  ToolsConf tools;
-  FlagsConf flags;
+  // modified with build profile
+  CConf c;
+  CXXConf cxx;
 
   LibraryConf libs;
-  FilesConf files;
+
+  std::vector<Dependency> internal_deps;
+  std::vector<Dependency> external_deps;
 
   HooksConf prebuild_hooks;
   HooksConf postbuild_hooks;
@@ -151,12 +167,27 @@ struct ConfigurationFile
   using scl_recurse = std::tuple<
     scl::field<&ConfigurationFile::meta, "hewg">,
     scl::field<&ConfigurationFile::project, "project">,
-    scl::field<&ConfigurationFile::tools, "tools", false>,
     scl::field<&ConfigurationFile::libs, "libraries", false>,
-    scl::field<&ConfigurationFile::flags, "flags">,
-    scl::field<&ConfigurationFile::files, "files">,
+    scl::field<&ConfigurationFile::tools, "tools", false>,
+    scl::field<&ConfigurationFile::c, "c">,
+    scl::field<&ConfigurationFile::cxx, "cxx">,
+    scl::field<&ConfigurationFile::internal_deps, "internal", false>,
+    scl::field<&ConfigurationFile::external_deps, "external", false>,
     scl::field<&ConfigurationFile::prebuild_hooks, "hooks.prebuild", false>,
     scl::field<&ConfigurationFile::postbuild_hooks, "hooks.postbuild", false>>;
+};
+
+struct ToolFile
+{
+  std::string cxx;
+  std::string cc;
+  std::string ld;
+  std::string ar;
+
+  using scl_fields = std::tuple<scl::field<&ToolFile::cxx, "cxx">,
+                                scl::field<&ToolFile::cc, "cc">,
+                                scl::field<&ToolFile::ld, "ld">,
+                                scl::field<&ToolFile::ar, "ar">>;
 };
 
 ConfigurationFile
@@ -164,5 +195,5 @@ get_config_file(ToplevelOptions const&,
                 std::filesystem::path path,
                 std::string_view build_profile);
 
-constexpr auto LINUX_BUILD_PROFILE = "linux";
-constexpr auto MINGW_BUILD_PROFILE = "mingw";
+ToolFile
+get_tool_file(ConfigurationFile const& confs, std::string_view build_profile);

@@ -1,13 +1,13 @@
 #include <filesystem>
 #include <jayson.hh>
 #include <optional>
-#include <regex>
 #include <scl.hh>
 
 #include "analysis.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
+#include "paths.hh"
 
 std::string_view
 project_type_to_string(ProjectType const t)
@@ -46,8 +46,9 @@ get_config_file(ToplevelOptions const& options,
   std::string config_filedata = read_file(path);
   scl::file file(config_filedata);
 
-  auto const flags_bp = std::string("flags.").append(build_profile);
-  auto const files_bp = std::string("files.").append(build_profile);
+  auto const cxx_bp = std::string("cxx.").append(build_profile);
+  auto const c_bp = std::string("c.").append(build_profile);
+  auto const tool_bp = std::string("tools.").append(build_profile);
 
   ConfigurationFile conf;
   scl::deserialize(conf, file);
@@ -73,46 +74,73 @@ get_config_file(ToplevelOptions const& options,
   // now we do some jank where we append vectors
   // depending on the build profile
 
-  if (file.table_exists(flags_bp)) {
-    FlagsConf append;
-    scl::deserialize(append, file, flags_bp);
+  if (file.table_exists(cxx_bp)) {
+    CXXConf append;
+    scl::deserialize(append, file, cxx_bp);
 
-    conf.flags.c_flags.insert(
-      conf.flags.c_flags.end(), append.c_flags.begin(), append.c_flags.end());
+    conf.cxx.flags = append.flags;
+    conf.cxx.sources.insert(
+      conf.cxx.sources.end(), append.sources.begin(), append.sources.end());
 
-    conf.flags.cxx_flags.insert(conf.flags.cxx_flags.end(),
-                                append.cxx_flags.begin(),
-                                append.cxx_flags.end());
-
-    conf.flags.ld_flags.insert(conf.flags.ld_flags.end(),
-                               append.ld_flags.begin(),
-                               append.ld_flags.end());
+    if (append.std)
+      conf.cxx.std = append.std;
   }
 
-  if (file.table_exists(files_bp)) {
-    FilesConf append;
-    scl::deserialize(append, file, files_bp);
+  if (file.table_exists(c_bp)) {
+    CConf append;
+    scl::deserialize(append, file, c_bp);
 
-    conf.files.cxx.insert(
-      conf.files.cxx.end(), append.cxx.begin(), append.cxx.end());
-    conf.files.c.insert(conf.files.c.end(), append.c.begin(), append.c.end());
+    conf.c.flags = append.flags;
+    conf.c.sources.insert(
+      conf.c.sources.end(), append.sources.begin(), append.sources.end());
+
+    if (append.std)
+      conf.c.std = append.std;
+  }
+
+  if (file.table_exists(tool_bp)) {
+    ToolProfile replace;
+    scl::deserialize(replace, file, tool_bp);
+    conf.tools = replace;
   }
 
   return conf;
+}
+
+ToolProfile
+get_default_tool_profile()
+{
+#ifdef __linux__
+  return ToolProfile{ "linux-gcc" };
+#else
+#error building only allowed on linux
+#endif
+};
+
+ToolFile
+get_tool_file(ConfigurationFile const&, std::string_view build_profile)
+{
+  auto const static tool_dir = user_hewg_directory / "tools";
+  if (build_profile == "default") {
+#ifdef __linux__
+    auto const tool_file = tool_dir / "linux-gcc";
+#else
+#error only linux supported at this time
+#endif
+
+    ToolFile into;
+    auto filedata = read_file(tool_file);
+    scl::file file(filedata);
+    scl::deserialize(into, file, "tools");
+
+    return into;
+  } else {
+    throw std::runtime_error("only supporting default build profile rn");
+  }
 }
 
 jayson::val
 config_to_project_manifest(ConfigurationFile const&)
 {
   throw std::runtime_error("config to project manifest unimplemented");
-
-  // jayson::obj out;
-
-  // out.insert_or_assign("name", config.project.name);
-
-  // jayson::array version;
-
-  // out.insert_or_assign("version", config.project.version);
-
-  // return out;
 }
