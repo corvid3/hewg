@@ -19,19 +19,25 @@ name = "%NAME%"
 description = ""
 authors = { }
 
-[flags]
-cxx = { "-Wextra" "-Werror" "-std=c++23" }
-
 [libraries]
 native = { }
+
+[cxx]
+flags = { "-Wextra" "-Werror" }
+std = 23
+sources = 
+{
+  "%DEFAULTFILE%"  
+}
+
+[c]
+flags = { "-Wextra" "-Werror" }
+std = 17
+sources = { }
 
 [hooks.prebuild]
 [hooks.postbuild]
 
-[files]
-cxx = { "%DEFAULTFILE%" }
-
-c = { }
 )";
 
 std::regex static const version_regex("%VERSION%");
@@ -55,8 +61,12 @@ create_scl_file(std::string name,
                 std::string default_filename)
 {
   // wow the stdlib regex blows
-  auto&& a = std::regex_replace(
-    scl_template, version_regex, version_triplet_to_string(this_hewg_version));
+  auto&& a = std::regex_replace(scl_template,
+                                version_regex,
+                                std::format("{} {} {}",
+                                            std::get<0>(this_hewg_version),
+                                            std::get<1>(this_hewg_version),
+                                            std::get<2>(this_hewg_version)));
   auto&& b = std::regex_replace(a, name_regex, name);
   auto&& c = std::regex_replace(b, type_regex, type);
   auto&& d = std::regex_replace(c, defaultfile_regex, default_filename);
