@@ -19,7 +19,7 @@ constexpr std::string_view skip_regex = R"(\s+)";
 
 // parser doesn't need to be very robust,
 // we verify the filepaths are ok afterwards
-constexpr std::string_view identifier_regex = R"(([a-zA-Z0-9_\.\/]|\\ )+)";
+constexpr std::string_view identifier_regex = R"(([a-zA-Z0-9_\-\.\/]|\\ )+)";
 constexpr std::string_view colon_regex = ":";
 constexpr std::string_view backslash_regex = R"(\\)";
 

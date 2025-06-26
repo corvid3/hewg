@@ -69,21 +69,7 @@ clean(ThreadPool&,
     to_clean.push_back(what);
   };
 
-  // make sure to nuke the hook cache
-  delete_if_exists(hewg_hook_cache_path);
-  delete_if_exists(hewg_builtinsym_cache_path);
-  delete_if_exists(hewg_builtinsym_src_path);
-  delete_if_exists(hewg_builtinsym_obj_path);
-
-  delete_if_exists(hewg_c_object_cache_path);
-  delete_if_exists(hewg_c_pic_object_cache_path);
-  delete_if_exists(hewg_cxx_object_cache_path);
-  delete_if_exists(hewg_cxx_pic_object_cache_path);
-
-  delete_if_exists(hewg_c_dependency_cache_path);
-  delete_if_exists(hewg_c_pic_dependency_cache_path);
-  delete_if_exists(hewg_cxx_dependency_cache_path);
-  delete_if_exists(hewg_cxx_pic_dependency_cache_path);
+  delete_if_exists(hewg_cache_path);
 
   if (to_clean.empty()) {
     threadsafe_print("nothing to clean!\n");

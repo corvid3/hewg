@@ -11,8 +11,8 @@ name = "hewg"
 description = "compiler build system and management software"
 authors = { "crow" }
 
-# [tools]
-# name = "linux-gcc"
+[tools]
+name = "linux-clang"
 
 # [tools.mingw]
 # 

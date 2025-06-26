@@ -118,25 +118,17 @@ get_default_tool_profile()
 };
 
 ToolFile
-get_tool_file(ConfigurationFile const&, std::string_view build_profile)
+get_tool_file(ConfigurationFile const& config, std::string_view)
 {
   auto const static tool_dir = user_hewg_directory / "tools";
-  if (build_profile == "default") {
-#ifdef __linux__
-    auto const tool_file = tool_dir / "linux-gcc";
-#else
-#error only linux supported at this time
-#endif
+  auto const tool_file = tool_dir / config.tools.tool_profile_name;
 
-    ToolFile into;
-    auto filedata = read_file(tool_file);
-    scl::file file(filedata);
-    scl::deserialize(into, file, "tools");
+  ToolFile into;
+  auto filedata = read_file(tool_file);
+  scl::file file(filedata);
+  scl::deserialize(into, file, "tools");
 
-    return into;
-  } else {
-    throw std::runtime_error("only supporting default build profile rn");
-  }
+  return into;
 }
 
 jayson::val
