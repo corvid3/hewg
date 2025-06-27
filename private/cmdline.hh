@@ -88,6 +88,7 @@ struct BuildOptions : terse::TerminalSubcommand
 struct ToplevelOptions : terse::NonterminalSubcommand
 {
   bool force = false;
+  bool skip_pause = false;
 
   bool verbose_print = false;
   unsigned num_tasks = std::thread::hardware_concurrency();
@@ -109,6 +110,10 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   "forces the build system to try to run against a project. "
                   "use this wisely",
                   &ToplevelOptions::force>,
+    terse::Option<"skip",
+                  's',
+                  "skips the countdown on a number of different commands",
+                  &ToplevelOptions::skip_pause>,
     terse::Option<"verbose",
                   'v',
                   "enables verbose printing & diag output",

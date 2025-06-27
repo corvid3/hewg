@@ -201,6 +201,8 @@ create_directory_checked(std::filesystem::path const what);
 std::filesystem::path const&
 get_home_directory();
 
+inline bool skip_countdown = false;
+
 // use this if you need to buffer some actions
 // on the terminal with time
 // use this whenever you're deleting files, probably

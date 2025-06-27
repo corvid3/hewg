@@ -93,6 +93,8 @@ try {
   if (tl_options.verbose_print)
     verbose_output = true;
 
+  skip_countdown = tl_options.skip_pause;
+
   auto const config_path = tl_options.config_file_path.value_or("./hewg.scl");
 
   // TODO: change this with an argument

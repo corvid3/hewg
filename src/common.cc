@@ -78,6 +78,9 @@ is_subpathed_by(std::filesystem::path const owning_directory,
 void
 do_terminal_countdown(int const num)
 {
+  if (skip_countdown)
+    return;
+
   for (auto i = 0; i < num; i++) {
     threadsafe_print(std::format("{}...\n", num - i));
 
