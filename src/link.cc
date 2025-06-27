@@ -20,7 +20,8 @@ generate_link_flags(ConfigurationFile const&,
   args.push_back("-o");
   args.push_back(output_filepath);
 
-  args.push_back(std::format("-fuse-ld={}", tools.ld));
+  if (tools.ld != "ld")
+    args.push_back(std::format("-fuse-ld={}", tools.ld));
 
   // if (is_release)
   //   args.push_back("-flto");
