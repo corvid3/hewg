@@ -69,7 +69,7 @@ link_executable(ConfigurationFile const& config,
   threadsafe_print("now lets get linking...\n");
   append_vec(args, get_library_flags(config, false));
 
-  run_command("c++", args);
+  run_command(tools.cxx, args);
 
   // we also want to strip the executable if we're
   // creating a release executable
