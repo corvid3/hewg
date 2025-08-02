@@ -55,6 +55,7 @@ sources =
     "compile.cc"
     "link.cc"
 
+    "compile_commands.cc"
     "build.cc"
     "init.cc"
     "hooks.cc"
