@@ -1,12 +1,18 @@
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <vector>
+#include <jayson.hh>
 
 #include "analysis.hh"
 #include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "compile.hh"
+#include "compile_commands.hh"
 #include "confs.hh"
 #include "hooks.hh"
 #include "link.hh"
@@ -40,6 +46,60 @@
 
 //   return include_dirs;
 // }
+
+static std::vector<std::string>
+generate_compile_arguments(std::string const& compiler,
+                           std::string const& standard,
+                           std::vector<std::string> const& flags,
+                           std::string const& relative_source_path)
+{
+  return std::vector<std::string>{
+    compiler,
+    "-c",
+    "-Iprivate",
+    "-Iinclude",
+    standard,
+    relative_source_path
+  } + flags;
+}
+
+static void
+generate_compile_commands(ConfigurationFile const& config,
+                          ToolFile const& tools)
+{
+  std::vector<CompileCommand> commands;
+
+  auto const cxx_filepaths = get_cxx_source_filepaths(config);
+  for (auto const& filepath : cxx_filepaths) {
+    std::string const relative_source_path = std::filesystem::relative(filepath);
+
+    commands.push_back(CompileCommand{
+      std::filesystem::current_path(),
+      generate_compile_arguments(tools.cxx,
+                                std::format("-std={}", get_cxx_standard_string(config.cxx.std.value_or(20))),
+                                config.cxx.flags,
+                                relative_source_path),
+      relative_source_path
+    });
+  }
+
+  auto const c_filepaths = get_c_source_filepaths(config);
+  for (auto const& filepath : c_filepaths) {
+    std::string const relative_source_path = std::filesystem::relative(filepath);
+
+    commands.push_back(CompileCommand{
+      std::filesystem::current_path(),
+      generate_compile_arguments(tools.cc,
+                                 std::format("-std={}", get_c_standard_string(config.c.std.value_or(17))),
+                                 config.cxx.flags,
+                                 relative_source_path),
+      relative_source_path
+    });
+  }
+
+
+  std::ofstream("compile_commands.json") << serialize_compile_commands(commands);
+}
 
 // helper function to build both
 // c/cxx and return the object files
@@ -144,6 +204,15 @@ build(ThreadPool& threads,
       BuildOptions const& build_opts,
       std::string_view build_profile)
 {
+  ToolFile const tools = get_tool_file(config, build_profile);
+
+  if (build_opts.generate_compile_commands) {
+    // just create the compile_commands.json and exit
+    threadsafe_print(std::format("writing: {}/compile_commands.json", std::filesystem::current_path().string()));
+    do_terminal_countdown(3);
+    generate_compile_commands(config, tools);
+    return;
+  }
   // get the dependency graph
   trigger_prebuild_hooks(config);
 
@@ -153,8 +222,6 @@ build(ThreadPool& threads,
   create_directory_checked(hewg_target_directory_path / build_profile);
 
   auto const emit_dir = hewg_target_directory_path / build_profile;
-
-  ToolFile const tools = get_tool_file(config, build_profile);
 
   switch (config.meta.type) {
     case ProjectType::Executable:

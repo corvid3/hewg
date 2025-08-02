@@ -10,6 +10,12 @@ local_todo
 bin/*
 err/
 test/testProject
+test/.cache
 test/.hcache
+test/.vscode
+.cache
 .hcache
+.vscode
 target
+
+compile_commands.json

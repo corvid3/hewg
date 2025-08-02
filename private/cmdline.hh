@@ -75,6 +75,7 @@ struct BuildOptions : terse::TerminalSubcommand
 
   bool help = false;
   bool release = false;
+  bool generate_compile_commands = false;
 
   using options = std::tuple<
     terse::Option<"help", 'h', "prints this help", &BuildOptions::help>,
@@ -82,7 +83,11 @@ struct BuildOptions : terse::TerminalSubcommand
                   std::nullopt,
                   "changes the build type to release mode, enabling "
                   "all optimizations and stripping",
-                  &BuildOptions::release>>;
+                  &BuildOptions::release>,
+    terse::Option<"generate-compile-commands",
+                  std::nullopt,
+                  "generates a compile_commands.json for a given project, then exits",
+                  &BuildOptions::generate_compile_commands>>;
 };
 
 struct ToplevelOptions : terse::NonterminalSubcommand
