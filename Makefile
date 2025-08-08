@@ -56,6 +56,7 @@ SRCS=src/main.cc \
 	src/compile.cc \
 	src/analysis.cc \
 	src/thread_pool.cc \
+	src/compile_commands.cc \
 	src/build.cc \
 	src/link.cc \
 	src/init.cc \

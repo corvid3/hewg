@@ -3,7 +3,7 @@
 
 
 std::string
-serialize_compile_commands(std::vector<CompileCommand> commands)
+serialize_compile_commands(std::vector<CompileCommand> const& commands)
 {
     return jayson::serialize(commands).serialize(true);
 }
