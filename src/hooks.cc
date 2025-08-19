@@ -1,4 +1,3 @@
-#include "common.hh"
 #include "confs.hh"
 #include "hooks.hh"
 #include "paths.hh"
@@ -40,11 +39,7 @@ private:
     ss << std::ifstream(hewg_hook_cache_path).rdbuf();
 
     jayson::val v = jayson::val::parse(std::move(ss).str());
-    HookCache out;
-
-    jayson::deserialize(v, out);
-
-    return out;
+    return jayson::deserialize<HookCache>(v);
   }
 
   static void write_hook_cache(HookCache cache)

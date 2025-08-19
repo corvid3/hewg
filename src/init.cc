@@ -9,6 +9,7 @@
 #include "common.hh"
 #include "confs.hh"
 #include "init.hh"
+#include "semver.hh"
 
 auto static const scl_template = R"([hewg]
 version = { %VERSION% }
@@ -64,12 +65,8 @@ create_scl_file(std::string name,
                 std::string default_filename)
 {
   // wow the stdlib regex blows
-  auto&& a = std::regex_replace(scl_template,
-                                version_regex,
-                                std::format("{} {} {}",
-                                            std::get<0>(this_hewg_version),
-                                            std::get<1>(this_hewg_version),
-                                            std::get<2>(this_hewg_version)));
+  auto&& a = std::regex_replace(
+    scl_template, version_regex, std::format("\"{}\"", this_hewg_version));
   auto&& b = std::regex_replace(a, name_regex, name);
   auto&& c = std::regex_replace(b, type_regex, type);
   auto&& d = std::regex_replace(c, defaultfile_regex, default_filename);

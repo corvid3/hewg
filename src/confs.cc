@@ -8,6 +8,7 @@
 #include "common.hh"
 #include "confs.hh"
 #include "paths.hh"
+#include "semver.hh"
 
 std::string_view
 project_type_to_string(ProjectType const t)
@@ -39,26 +40,26 @@ project_type_from_string(std::string_view s)
 }
 
 ConfigurationFile
-get_config_file(ToplevelOptions const& options,
-                std::filesystem::path path,
-                std::string_view build_profile)
+get_config_file(ToplevelOptions const& options, std::filesystem::path path)
 {
   std::string config_filedata = read_file(path);
   scl::file file(config_filedata);
 
-  auto const cxx_bp = std::string("cxx.").append(build_profile);
-  auto const c_bp = std::string("c.").append(build_profile);
-  auto const tool_bp = std::string("tools.").append(build_profile);
-
   ConfigurationFile conf;
   scl::deserialize(conf, file);
 
-  if (not semantically_valid(conf.meta.version, this_hewg_version)) {
+  SemVer const this_hewg_semver = this_hewg_version;
+  auto const requested_semver = parse_semver(conf.meta.hewg_version);
+
+  if (not requested_semver)
+    throw std::runtime_error("invalid requested hewg version");
+
+  if (*requested_semver > this_hewg_semver) {
     if (not options.force)
       throw std::runtime_error(
         std::format("hewg project requests version {}, but we have {}",
-                    version_triplet_to_string(conf.meta.version),
-                    version_triplet_to_string(this_hewg_version)));
+                    *requested_semver,
+                    this_hewg_semver));
     else
       threadsafe_print(
         "forcing execution of build system on mismatched hewg version!");
@@ -73,37 +74,6 @@ get_config_file(ToplevelOptions const& options,
 
   // now we do some jank where we append vectors
   // depending on the build profile
-
-  if (file.table_exists(cxx_bp)) {
-    CXXConf append;
-    scl::deserialize(append, file, cxx_bp);
-
-    conf.cxx.flags = append.flags;
-    conf.cxx.sources.insert(
-      conf.cxx.sources.end(), append.sources.begin(), append.sources.end());
-
-    if (append.std)
-      conf.cxx.std = append.std;
-  }
-
-  if (file.table_exists(c_bp)) {
-    CConf append;
-    scl::deserialize(append, file, c_bp);
-
-    conf.c.flags = append.flags;
-    conf.c.sources.insert(
-      conf.c.sources.end(), append.sources.begin(), append.sources.end());
-
-    if (append.std)
-      conf.c.std = append.std;
-  }
-
-  if (file.table_exists(tool_bp)) {
-    ToolProfile replace;
-    scl::deserialize(replace, file, tool_bp);
-    conf.tools = replace;
-  }
-
   return conf;
 }
 
@@ -117,16 +87,23 @@ get_default_tool_profile()
 #endif
 };
 
-ToolFile
-get_tool_file(ConfigurationFile const& config, std::string_view)
+TargetFile
+get_target_file(TargetTriplet const target)
 {
-  auto const static tool_dir = user_hewg_directory / "tools";
-  auto const tool_file = tool_dir / config.tools.tool_profile_name;
+  auto const static target_dir = user_hewg_directory / "targets";
+  auto const filepath = target_dir / target.to_string();
 
-  ToolFile into;
-  auto filedata = read_file(tool_file);
+  if (not std::filesystem::exists(filepath))
+    throw std::runtime_error(
+      std::format("requested target triplet <{}> tool file doesn't exist",
+                  target.to_string()));
+
+  TargetFile into(target);
+  auto filedata = read_file(filepath);
   scl::file file(filedata);
   scl::deserialize(into, file, "tools");
+
+  into.triplet = target;
 
   return into;
 }

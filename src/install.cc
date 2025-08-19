@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -6,7 +5,6 @@
 #include <ostream>
 #include <scl.hh>
 #include <stdexcept>
-#include <vector>
 
 #include "analysis.hh"
 #include "common.hh"
@@ -39,80 +37,38 @@ ensure_user_hewg_directory()
   return user_hewg_directory;
 }
 
-static jayson::val
-skel_manifest(std::string_view package_name)
-{
-  jayson::obj obj;
-  obj.insert_or_assign("name", jayson::val(std::string(package_name)));
-  obj.insert_or_assign("versions", jayson::array{});
-  return obj;
-}
-
+// updates the symlink in .hewg/bin for a given package to point
+// to a specified version-target
 static void
-ensure_package(std::string_view package_name)
+select_executable(PackageCacheDB const& db,
+                  PackageIdentifier const package_ident)
 {
-  auto const package_dir = hewg_packages_directory / package_name;
-
-  std::filesystem::create_directories(package_dir);
-
-  if (not std::filesystem::exists(package_dir / "manifest.json")) {
-    std::ofstream(package_dir / "manifest.json")
-      << skel_manifest(package_name).serialize(false);
-  }
-}
-
-static void
-select_executable(std::string_view name, version_triplet const trip)
-{
-  VersionManifest manifest = open_version_manifest(name);
-
-  auto const version = std::ranges::find(manifest.versions, trip);
-  if (version == manifest.versions.end())
+  if (not db.contains(package_ident))
     throw std::runtime_error(
-      std::format("unable to select executable version {} for package {}, as "
-                  "it is not available",
-                  version_triplet_to_string(trip),
-                  name));
+      std::format("attempting to select executable {}, which doesn't exist",
+                  package_ident));
 
-  auto const package_dir =
-    hewg_packages_directory / name / version_triplet_to_string(trip);
-  auto const exec_path = package_dir / name;
+  auto const package_dir = get_package_directory(package_ident);
+  auto const exe_path = package_dir / package_ident.name();
 
-  if (std::filesystem::exists(hewg_bin_directory / name)) {
-    if (not std::filesystem::is_symlink(hewg_bin_directory / name))
-      throw std::runtime_error(
-        std::format("{} exists, but isn't a symlink??? try deleting it.",
-                    (hewg_bin_directory / name).string()));
-
-    threadsafe_print(std::format("deleting symlink {}...\n",
-                                 (hewg_bin_directory / name).string()));
-    do_terminal_countdown(3);
-
-    std::filesystem::remove(hewg_bin_directory / name);
-  }
-
-  std::filesystem::create_symlink(exec_path, hewg_bin_directory / name);
+  std::filesystem::create_symlink(exe_path,
+                                  hewg_bin_directory / package_ident.name());
 }
 
 static void
 install_executable(ConfigurationFile const& config,
-                   std::string_view profile,
+                   PackageIdentifier const& ident,
                    std::filesystem::path const& install_dir)
 {
-  auto const executable_name = config.project.name;
-  auto const executable_path =
-    get_target_folder_for_build_profile(profile) / executable_name;
-
-  std::filesystem::copy_file(executable_path,
-                             install_dir / executable_name,
+  auto const executable = get_artifact_folder(ident) / config.project.name;
+  std::filesystem::copy_file(executable,
+                             install_dir / config.project.name,
                              std::filesystem::copy_options::update_existing);
-
-  select_executable(executable_name, config.project.version);
 }
 
 static void
 install_headers(ConfigurationFile const& config,
-                std::string_view,
+                PackageIdentifier const&,
                 std::filesystem::path const& install_dir)
 {
   auto const include_header_dir = install_dir / "include" / config.project.name;
@@ -125,34 +81,51 @@ install_headers(ConfigurationFile const& config,
 
 static void
 install_library(ConfigurationFile const& config,
-                std::string_view profile,
+                PackageIdentifier const& this_package_ident,
                 std::filesystem::path const& install_dir)
 {
-  install_headers(config, profile, install_dir);
+  install_headers(config, this_package_ident, install_dir);
 
   auto const lib_filename = static_library_name_for_project(config, false);
   auto const lib_pie_filename = static_library_name_for_project(config, true);
 
-  std::filesystem::copy(get_target_folder_for_build_profile(profile) /
-                          lib_filename,
+  auto const target_path =
+    hewg_target_directory_path / this_package_ident.target().to_string();
+
+  std::filesystem::copy(target_path / lib_filename,
                         install_dir / lib_filename,
                         std::filesystem::copy_options::update_existing);
 
-  std::filesystem::copy(get_target_folder_for_build_profile(profile) /
-                          lib_pie_filename,
+  std::filesystem::copy(target_path / lib_pie_filename,
                         install_dir / lib_pie_filename,
                         std::filesystem::copy_options::update_existing);
 }
 
+/*
+
+~/.hewg/packages
+  * package directory
+
+~/.hewg/packages/org:some-package:version:target
+  * "hash" of a package, installed files and readmes are in here
+  * binaries are also in here, and are symlinked from
+
+~/.hewg/bin/
+  * symlink directory for binaries, so they may appear in the path
+
+*/
+
 void
 install(ConfigurationFile const& config,
-        InstallOptions const&,
-        std::string_view profile)
+        TargetTriplet const target,
+        BuildOptions const&)
 {
+  auto const package_ident = get_this_package_ident(config, target);
+
   ensure_user_hewg_directory();
-  ensure_package(config.project.name);
-  auto const install_directory =
-    add_version_to_package(config.project.name, config.project.version);
+  auto db = open_package_db();
+
+  auto const install_directory = create_package_instance(db, package_ident);
 
   {
     auto const info_path = install_directory / "info.scl";
@@ -167,11 +140,16 @@ install(ConfigurationFile const& config,
 
   switch (config.meta.type) {
     case ProjectType::Executable:
-      install_executable(config, profile, install_directory);
+      install_executable(config, package_ident, install_directory);
+
+      // NOTE: maybe the end user doesn't want to immediately select the
+      // version? also, intended to be that one could run select by itself and
+      // choose the version of a package to put onto the path.
+      select_executable(db, package_ident);
       break;
 
     case ProjectType::StaticLibrary:
-      install_library(config, profile, install_directory);
+      install_library(config, package_ident, install_directory);
       break;
 
     case ProjectType::SharedLibrary:
@@ -180,7 +158,9 @@ install(ConfigurationFile const& config,
       break;
 
     case ProjectType::Headers:
-      install_headers(config, profile, install_directory);
+      install_headers(config, package_ident, install_directory);
       break;
   }
+
+  save_package_db(db);
 }

@@ -1,40 +1,30 @@
 [hewg]
-version = { 0 3 0 }
+version = "0.3.0"
 type = "executable"
-# changes the default profile to build for
-# useful when defaulting to crosscomp for e.g. riscv
-# profile_override = "linux"
 
 [project]
-version = { 0 3 0 }
+version = "0.3.0"
+org = "crow"
 name = "hewg"
 description = "compiler build system and management software"
 authors = { "crow" }
 
-# [tools]
-# name = "linux-clang"
-
-# [tools.mingw]
-# 
-
-[debug.default]
+[debug]
 opt_level = 0
 lto = false
 strip = false
 
-[release.default]
+[release]
 opt_level = 2
 lto = true
 strip = true
 
 [libraries]
-native = { "scl" }
+native = { "scl" "datalogpp" }
 
-# [[internal]]
-# name = "scl"
-# org = "crow"
-# version = { 0 1 0 }
-# exact = false
+[depends]
+internal = { }
+external = { }
 
 # default values for cxx
 # build profile subtables
@@ -64,6 +54,8 @@ sources =
 
     "analysis.cc"
     "depfile.cc"
+    "semver.cc"
+    "target.cc"
 }
 
 [c]

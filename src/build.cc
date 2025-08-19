@@ -3,7 +3,6 @@
 #include <vector>
 
 #include "analysis.hh"
-#include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "compile.hh"
@@ -46,10 +45,10 @@
 static std::vector<std::filesystem::path>
 build_c_cxx(ThreadPool& threads,
             ConfigurationFile const& config,
-            ToolFile const& tools,
+            TargetFile const& tools,
             std::filesystem::path const& cache,
-            bool release,
-            bool pic)
+            bool const release,
+            bool const pic)
 {
   auto [cxx_object_files, cxx_futures] =
     compile_cxx(threads, config, tools, cache, release, pic);
@@ -84,65 +83,72 @@ build_c_cxx(ThreadPool& threads,
 static void
 build_executable(ThreadPool& threads,
                  ConfigurationFile const& config,
-                 ToolFile const& tools,
+                 TargetFile const& target,
                  BuildOptions const& build_opts,
-                 std::string_view build_profile,
                  std::filesystem::path const& emit_dir)
 {
   // auto const include_dirs = get_include_directories_for_packages(config);
-  auto const cache = get_cache_folder(build_profile, build_opts.release, false);
+  auto const cache =
+    get_cache_folder(target.triplet.to_string(), build_opts.release, false);
   auto object_files =
-    build_c_cxx(threads, config, tools, cache, build_opts.release, false);
+    build_c_cxx(threads, config, target, cache, build_opts.release, false);
 
-  object_files.push_back(compile_hewgsym(config, tools, false));
+  object_files.push_back(compile_hewgsym(config, target, false));
 
-  link_executable(config, tools, build_opts, object_files, emit_dir);
+  link_executable(config, target, build_opts, object_files, emit_dir);
 
   if (build_opts.release)
     run_command("strip", "-s", (emit_dir / config.project.name).string());
 }
 
-[[maybe_unused]] static void
-build_static_library(ThreadPool& threads [[maybe_unused]],
-                     ConfigurationFile const& config [[maybe_unused]],
-                     BuildOptions const& build_opts [[maybe_unused]],
-                     std::filesystem::path const& emit_dir [[maybe_unused]])
+static void
+build_static_library(ThreadPool& threads,
+                     ConfigurationFile const& config,
+                     TargetFile const& target,
+                     BuildOptions const& build_opts,
+                     std::filesystem::path const& emit_dir)
 {
-  // auto const include_dirs = get_include_directories_for_packages(config);
 
-  // threadsafe_print("building non-PIC library code...");
-  // auto const object_files =
-  //   compile_c_cxx(threads, config, {}, build_opts.release, false);
+  {
+    auto const non_pic_cache =
+      get_cache_folder(target.triplet.to_string(), build_opts.release, false);
+    threadsafe_print("building non-PIC library code...");
+    auto const object_files = build_c_cxx(
+      threads, config, target, non_pic_cache, build_opts.release, false);
+    pack_static_library(config, target, object_files, emit_dir, false);
+  }
 
-  // threadsafe_print("building PIC library code...");
-  // auto const object_files_pic =
-  //   compile_c_cxx(threads, config, {}, build_opts.release, true);
-
-  // pack_static_library(config, object_files, emit_dir, false);
-  // pack_static_library(config, object_files, emit_dir, true);
+  {
+    auto const pic_cache =
+      get_cache_folder(target.triplet.to_string(), build_opts.release, true);
+    threadsafe_print("building PIC library code...");
+    auto const object_files =
+      build_c_cxx(threads, config, target, pic_cache, build_opts.release, true);
+    pack_static_library(config, target, object_files, emit_dir, true);
+  }
 }
 
 static void
 build_shared_library(ThreadPool& threads,
                      ConfigurationFile const& config,
-                     ToolFile const& tools,
+                     TargetFile const& target,
                      BuildOptions const& build_opts,
-                     std::string_view build_profile,
                      std::filesystem::path const& emit_dir)
 {
-  auto const cache = get_cache_folder(build_profile, build_opts.release, true);
+  auto const cache =
+    get_cache_folder(target.triplet.to_string(), build_opts.release, true);
 
   auto object_files =
-    build_c_cxx(threads, config, tools, cache, build_opts.release, true);
-  object_files.push_back(compile_hewgsym(config, tools, true));
-  shared_link(config, tools, build_opts, object_files, emit_dir);
+    build_c_cxx(threads, config, target, cache, build_opts.release, true);
+  object_files.push_back(compile_hewgsym(config, target, true));
+  shared_link(config, target, build_opts, object_files, emit_dir);
 }
 
 void
 build(ThreadPool& threads,
       ConfigurationFile const& config,
-      BuildOptions const& build_opts,
-      std::string_view build_profile)
+      TargetFile const& target,
+      BuildOptions const& build_opts)
 {
   // get the dependency graph
   trigger_prebuild_hooks(config);
@@ -150,27 +156,23 @@ build(ThreadPool& threads,
   std::vector<std::filesystem::path> object_files;
 
   create_directory_checked(hewg_target_directory_path);
-  create_directory_checked(hewg_target_directory_path / build_profile);
+  create_directory_checked(hewg_target_directory_path /
+                           target.triplet.to_string());
 
-  auto const emit_dir = hewg_target_directory_path / build_profile;
-
-  ToolFile const tools = get_tool_file(config, build_profile);
+  auto const ident = get_this_package_ident(config, target.triplet);
+  auto const emit_dir = get_artifact_folder(ident);
 
   switch (config.meta.type) {
     case ProjectType::Executable:
-      build_executable(
-        threads, config, tools, build_opts, build_profile, emit_dir);
+      build_executable(threads, config, target, build_opts, emit_dir);
       break;
 
     case ProjectType::StaticLibrary:
-      threadsafe_print("static library building not yet supported");
-      // build_static_library(threads, config, tools, build_opts, emit_dir);
+      build_static_library(threads, config, target, build_opts, emit_dir);
       break;
 
     case ProjectType::SharedLibrary: {
-      threadsafe_print("shared library building not yet supported");
-      build_shared_library(
-        threads, config, tools, build_opts, build_profile, emit_dir);
+      build_shared_library(threads, config, target, build_opts, emit_dir);
     } break;
 
       // header only projects

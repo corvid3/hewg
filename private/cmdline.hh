@@ -45,24 +45,6 @@ struct InitOptions : terse::TerminalSubcommand
       &InitOptions::directory>>;
 };
 
-struct InstallOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "install";
-  constexpr static auto usage = "<profile>";
-  constexpr static auto short_description =
-    "installs a built hewg project into the users path";
-  constexpr static auto description =
-    "Installs a built hewg project into the users path, depending on build "
-    "profile. Build profile defaults to the running operating system. Hewg "
-    "will automatically symlink the latest version of an "
-    "executable package to the path.";
-
-  bool help = false;
-
-  using options = std::tuple<
-    terse::Option<"help", 'h', "prints this help", &InstallOptions::help>>;
-};
-
 struct BuildOptions : terse::TerminalSubcommand
 {
   constexpr static auto name = "build";
@@ -75,6 +57,8 @@ struct BuildOptions : terse::TerminalSubcommand
 
   bool help = false;
   bool release = false;
+  bool install = false;
+  std::optional<std::string> target = std::nullopt;
 
   using options = std::tuple<
     terse::Option<"help", 'h', "prints this help", &BuildOptions::help>,
@@ -82,7 +66,16 @@ struct BuildOptions : terse::TerminalSubcommand
                   std::nullopt,
                   "changes the build type to release mode, enabling "
                   "all optimizations and stripping",
-                  &BuildOptions::release>>;
+                  &BuildOptions::release>,
+    terse::Option<"install",
+                  std::nullopt,
+                  "after building, compiles the built project into a package "
+                  "and installs into the local database",
+                  &BuildOptions::install>,
+    terse::Option<"target",
+                  std::nullopt,
+                  "sets the target triple to build for",
+                  &BuildOptions::target>>;
 };
 
 struct ToplevelOptions : terse::NonterminalSubcommand
@@ -131,8 +124,7 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   "prints the version of hewg",
                   &ToplevelOptions::print_version>>;
 
-  using subcommands =
-    std::tuple<BuildOptions, CleanOptions, InitOptions, InstallOptions>;
+  using subcommands = std::tuple<BuildOptions, CleanOptions, InitOptions>;
 };
 
 decltype(terse::execute<ToplevelOptions>({}, {}))

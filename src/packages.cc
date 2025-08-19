@@ -1,11 +1,43 @@
-#include "analysis.hh"
-#include "confs.hh"
+#include <algorithm>
+#include <compare>
+#include <datalogpp.hh>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <iterator>
+#include <jayson.hh>
+#include <optional>
+#include <scl.hh>
+#include <vector>
+
+#include "common.hh"
 #include "packages.hh"
 #include "paths.hh"
-#include <algorithm>
-#include <format>
-#include <scl.hh>
-#include <stdexcept>
+
+/*
+  .hewg/packages
+    contains all installed packages,
+    by org-name. then each named directory
+    contains the unique package instances,
+    version-target
+
+  .hewg/packages
+
+*/
+
+std::partial_ordering
+PackageIdentifier::operator<=>(PackageIdentifier const& rhs) const
+{
+  if (this->m_name == rhs.m_name and this->m_org == rhs.m_org and
+      this->m_target == rhs.m_target) {
+    if (this->m_version == rhs.m_version)
+      return std::partial_ordering::equivalent;
+    else
+      return this->m_version <=> rhs.m_version;
+  }
+
+  return std::partial_ordering::unordered;
+}
 
 /*
 
@@ -60,14 +92,141 @@
 //   // insert_recurse
 // }
 
-PackageInfo
-get_package_info(std::string_view name, version_triplet requested_version)
+using namespace datalogpp;
+
+// struct DepTreeCtx
+// {
+//   /*
+//     Package(NAME, VERSION, PACKAGE_TYPE, EXTERNAL_INTERNAL).
+//     Edge(NAME_PARENT, VERSION_PARENT, NAME_CHILD, VERSION_CHILD).
+//   */
+
+//   DepTreeCtx()
+//     : interpreter()
+//     , package(interpreter.predicate("package", 4))
+//     , edge(interpreter.predicate("edge", 4)) {};
+
+//   Interpreter interpreter;
+//   Predicate& package;
+//   Predicate& edge;
+// };
+
+std::optional<PackageIdentifier>
+select_package_from_dependency_identifier(PackageCacheDB const& db,
+                                          DependencyIdentifier dep)
 {
-  // auto const version_manifest = open_version_manifest(name);
-  auto const versioned_package_dir =
-    hewg_packages_directory / name /
-    version_triplet_to_string(requested_version);
-  auto const info_conf = versioned_package_dir / "info.scl";
+  std::vector<PackageIdentifier> candidates;
+  std::ranges::copy_if(db,
+                       std::inserter(candidates, candidates.end()),
+                       [&dep](PackageIdentifier const& in) -> bool {
+                         return in.org() == dep.org() and
+                                in.name() == dep.name() and
+                                in.target() == dep.target() and
+                                in.version().major() == dep.semver().major();
+                       });
+
+  if (candidates.empty())
+    return std::nullopt;
+
+  std::ranges::sort(
+    candidates, [](PackageIdentifier const& lhs, PackageIdentifier const& rhs) {
+      return lhs.version() > rhs.version();
+    });
+
+  return candidates.front();
+}
+
+// static void
+// build_dependency_tree_recurse(DepTreeCtx& interp,
+//                               PackageIdentifier self,
+//                               bool is_external,
+//                               std::vector<PackageIdentifier>& visited)
+// {
+//   auto const& package_info = get_package_info(self);
+
+//   std::string package_type;
+
+//   switch (package_info.meta.type) {
+//     case ProjectType::Executable:
+//     case ProjectType::Headers:
+//       throw std::runtime_error("unallowable package type in dependency
+//       tree");
+
+//     case ProjectType::StaticLibrary:
+//       package_type = "static";
+//       break;
+
+//     case ProjectType::SharedLibrary:
+//       package_type = "dynlib";
+//   }
+
+//   interp.package(self.name(),
+//                  version_triplet_to_string(self.version()),
+//                  package_type,
+//                  is_external ? "external" : "internal") = {};
+
+//   visited.push_back(self);
+
+//   for (auto const& ext_dep : package_info.external_deps) {
+//     auto const dep = *select_package_from_dep(ext_dep);
+
+//     if (std::ranges::contains(visited, dep))
+//       continue;
+
+//     build_dependency_tree_recurse(interp, dep, true, visited);
+//     interp.edge(self.name(),
+//                 version_triplet_to_string(self.version()),
+//                 dep.name(),
+//                 version_triplet_to_string(dep.version())) = {};
+//   }
+
+//   for (auto const& internal_dep : package_info.internal_deps) {
+//     auto const dep = *select_package_from_dep(internal_dep);
+
+//     if (std::ranges::contains(visited, dep))
+//       continue;
+
+//     build_dependency_tree_recurse(interp, dep, true, visited);
+//     interp.edge(self.name(),
+//                 version_triplet_to_string(self.version()),
+//                 dep.name(),
+//                 version_triplet_to_string(dep.version())) = {};
+//   }
+// }
+
+// void
+// build_dependency_tree(ConfigurationFile const& config)
+// {
+//   DepTreeCtx ctx;
+//   std::vector<PackageIdentifier> visited_packages;
+
+//   for (auto const& external : config.external_deps)
+//     build_dependency_tree_recurse(
+//       ctx, *select_package_from_dep(external), true, visited_packages);
+
+//   for (auto const& internal : config.internal_deps)
+//     build_dependency_tree_recurse(
+//       ctx, *select_package_from_dep(internal), true, visited_packages);
+
+//   std::cout << ctx.interpreter.dump_facts();
+
+//   // auto& package = dl.predicate("package", 4);
+//   // package("foo", "3.14.0", "static", "external") = {};
+//   // auto& external = dl.predicate("external", 1);
+//   // external("X"_V) = ("package"_p("X"_V, "Y"_V, "Z"_V, "external"));
+// }
+
+std::filesystem::path
+get_package_directory(PackageIdentifier const& ident)
+{
+  return hewg_packages_directory / std::format("{}", ident);
+}
+
+PackageInfo
+get_package_info(PackageIdentifier const ident)
+{
+  auto const instance_dir = get_package_directory(ident);
+  auto const info_conf = instance_dir / "info.scl";
 
   scl::file package_info_scl;
   PackageInfo package_info;
@@ -76,74 +235,41 @@ get_package_info(std::string_view name, version_triplet requested_version)
   return package_info;
 }
 
-std::optional<std::filesystem::path>
-try_get_compatable_package(std::string_view name,
-                           version_triplet requested_version)
+PackageCacheDB
+open_package_db()
 {
-  auto const version_manifest = open_version_manifest(name);
-  auto const best_version =
-    select_best_compatable_semver(version_manifest.versions, requested_version);
+  // WARNING: currently, package_db.json is _not_
+  // multi-process safe. lockfile should be added later
 
-  if (not best_version)
-    throw std::runtime_error(
-      std::format("unable to get a compatable version for package <{}>, "
-                  "requested version <{}>",
-                  name,
-                  version_triplet_to_string(requested_version)));
+  if (not std::filesystem::exists(hewg_package_db_path))
+    return {};
 
-  return hewg_packages_directory / name /
-         version_triplet_to_string(*best_version);
-}
-
-VersionManifest
-open_version_manifest(std::string_view package_name)
-{
-  auto const dir = hewg_packages_directory / package_name;
-  auto const version_manifest_file_path = dir / "manifest.json";
-
-  if (not std::filesystem::exists(dir))
-    throw std::runtime_error("attempting to open a version manifest in a "
-                             "package directory that doesn't exist");
-
-  std::stringstream ss;
-  ss << std::ifstream(version_manifest_file_path).rdbuf();
-  jayson::val v = jayson::val::parse(std::move(ss).str());
-  VersionManifest out;
-  jayson::deserialize(v, out);
-  return out;
+  return jayson::deserialize<PackageCacheDB>(
+    jayson::val(read_file(hewg_package_db_path)));
 }
 
 void
-write_version_manifest(std::string_view package_name,
-                       VersionManifest const& manifest)
+save_package_db(PackageCacheDB const& db)
 {
-  auto const dir = hewg_packages_directory / package_name;
-  auto const version_manifest_file_path = dir / "manifest.json";
+  // WARNING: currently, package_db.json is _not_
+  // multi-process safe. lockfile should be added later
+  std::vector<PackageIdentifier> ident;
 
-  jayson::val v = jayson::serialize(manifest);
-  std::ofstream(version_manifest_file_path) << v.serialize();
+  std::ofstream(hewg_package_db_path) << jayson::serialize(db).serialize(true);
 }
 
 std::filesystem::path
-add_version_to_package(std::string_view package_name,
-                       version_triplet const version_triplet)
+create_package_instance(PackageCacheDB& db, PackageIdentifier const package)
 {
-  auto const version_path = hewg_packages_directory / package_name /
-                            version_triplet_to_string(version_triplet);
+  auto const found = std::find_if(
+    db.begin(), db.end(), [=](auto const v) { return v == package; });
 
-  VersionManifest manifest = open_version_manifest(package_name);
+  auto const dir = get_package_directory(package);
 
-  auto const found =
-    std::find_if(manifest.versions.begin(),
-                 manifest.versions.end(),
-                 [=](auto const v) { return v == version_triplet; });
-
-  if (found == manifest.versions.end()) {
-    manifest.versions.push_back(version_triplet);
-    std::filesystem::create_directory(version_path);
+  if (found == db.end()) {
+    db.insert(package);
+    std::filesystem::create_directory(dir);
   }
 
-  write_version_manifest(package_name, manifest);
-
-  return version_path;
+  return dir;
 }

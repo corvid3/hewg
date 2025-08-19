@@ -1,14 +1,12 @@
 #pragma once
 
-#include "cmdline.hh"
-#include <filesystem>
 #include <jayson.hh>
 #include <optional>
 #include <scl.hh>
 #include <string>
 #include <tuple>
 
-using version_triplet = std::tuple<int, int, int>;
+#include "common.hh"
 
 inline bool
 operator==(version_triplet const l, version_triplet const r)
@@ -52,40 +50,32 @@ using ProjectTypeEnumDescriptor =
                              project_type_from_string,
                              project_type_to_string>;
 
-struct Dependency
-{
-  std::string name;
-  version_triplet version;
-  bool exact = false;
-
-  using scl_fields = std::tuple<scl::field<&Dependency::name, "name">,
-                                scl::field<&Dependency::version, "version">,
-                                scl::field<&Dependency::exact, "exact", false>>;
-};
-
 struct MetaConf
 {
-  version_triplet version;
+  // hewg version
+  std::string hewg_version;
   ProjectType type;
 
   std::optional<std::string> profile_override;
 
   using scl_fields = std::tuple<
-    scl::field<&MetaConf::version, "version">,
+    scl::field<&MetaConf::hewg_version, "version">,
     scl::enum_field<&MetaConf::type, "type", ProjectTypeEnumDescriptor>,
     scl::field<&MetaConf::profile_override, "profile_override", false>>;
 };
 
 struct ProjectConf
 {
-  version_triplet version;
+  std::string version;
   std::string name;
+  std::string org;
   std::string description;
   std::vector<std::string> authors;
 
   using scl_fields =
     std::tuple<scl::field<&ProjectConf::version, "version">,
                scl::field<&ProjectConf::name, "name">,
+               scl::field<&ProjectConf::org, "org">,
                scl::field<&ProjectConf::description, "description">,
                scl::field<&ProjectConf::authors, "authors">>;
 
@@ -143,6 +133,16 @@ struct ToolProfile
     std::tuple<scl::field<&ToolProfile::tool_profile_name, "name">>;
 };
 
+struct DependenciesConf
+{
+  std::vector<std::string> internal;
+  std::vector<std::string> external;
+
+  using scl_fields =
+    std::tuple<scl::field<&DependenciesConf::internal, "internal">,
+               scl::field<&DependenciesConf::external, "external">>;
+};
+
 ToolProfile
 get_default_tool_profile();
 
@@ -158,8 +158,7 @@ struct ConfigurationFile
 
   LibraryConf libs;
 
-  std::vector<Dependency> internal_deps;
-  std::vector<Dependency> external_deps;
+  DependenciesConf depends;
 
   HooksConf prebuild_hooks;
   HooksConf postbuild_hooks;
@@ -171,29 +170,7 @@ struct ConfigurationFile
     scl::field<&ConfigurationFile::tools, "tools", false>,
     scl::field<&ConfigurationFile::c, "c">,
     scl::field<&ConfigurationFile::cxx, "cxx">,
-    scl::field<&ConfigurationFile::internal_deps, "internal", false>,
-    scl::field<&ConfigurationFile::external_deps, "external", false>,
+    scl::field<&ConfigurationFile::depends, "depends">,
     scl::field<&ConfigurationFile::prebuild_hooks, "hooks.prebuild", false>,
     scl::field<&ConfigurationFile::postbuild_hooks, "hooks.postbuild", false>>;
 };
-
-struct ToolFile
-{
-  std::string cxx;
-  std::string cc;
-  std::string ld;
-  std::string ar;
-
-  using scl_fields = std::tuple<scl::field<&ToolFile::cxx, "cxx">,
-                                scl::field<&ToolFile::cc, "cc">,
-                                scl::field<&ToolFile::ld, "ld">,
-                                scl::field<&ToolFile::ar, "ar">>;
-};
-
-ConfigurationFile
-get_config_file(ToplevelOptions const&,
-                std::filesystem::path path,
-                std::string_view build_profile);
-
-ToolFile
-get_tool_file(ConfigurationFile const& confs, std::string_view build_profile);

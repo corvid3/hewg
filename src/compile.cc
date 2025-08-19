@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <chrono>
-#include <expected>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <future>
@@ -14,6 +14,7 @@
 #include "compile.hh"
 #include "confs.hh"
 #include "paths.hh"
+#include "semver.hh"
 #include "thread_pool.hh"
 
 constexpr auto generate_file_flags =
@@ -73,6 +74,14 @@ constexpr auto generate_cxx_flags =
            "-std={}", get_cxx_standard_string(config.cxx.std.value_or(20))) };
 };
 
+struct format_data
+{
+  int total_num;
+  int num_digits;
+
+  std::atomic<int> counter;
+};
+
 // static void
 // write_error_file(std::filesystem::path src_file, std::string_view what)
 // {
@@ -98,23 +107,29 @@ constexpr auto generate_cxx_flags =
 static std::future<std::optional<std::string>>
 start_cxx_compile_task(ThreadPool& thread_pool,
                        ConfigurationFile const&,
-                       ToolFile const& tool_file,
+                       TargetFile const& tool_file,
                        std::filesystem::path const source_filepath,
                        std::filesystem::path const object_filepath,
                        std::filesystem::path const depend_filepath,
-                       std::vector<std::string> common_flags)
+                       std::vector<std::string> common_flags,
+                       std::shared_ptr<format_data> formatting)
 {
   return thread_pool.add_job([source_filepath,
                               object_filepath,
                               depend_filepath,
                               common_flags,
+                              formatting,
                               &tool_file,
                               &thread_pool]() -> std::optional<std::string> {
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
 
-    threadsafe_print(
-      std::format("compiling CXX file: <{}>\n", relative_source_path.string()));
+    threadsafe_print(std::format("({:{}}/{:{}}) compiling CXX file: <{}>\n",
+                                 formatting->counter++,
+                                 formatting->num_digits,
+                                 formatting->total_num,
+                                 formatting->num_digits,
+                                 relative_source_path.string()));
 
     auto const [exit_code, what] = run_command(
       tool_file.cxx,
@@ -134,23 +149,29 @@ start_cxx_compile_task(ThreadPool& thread_pool,
 static std::future<std::optional<std::string>>
 start_c_compile_task(ThreadPool& thread_pool,
                      ConfigurationFile const&,
-                     ToolFile const& tool_file,
+                     TargetFile const& tool_file,
                      std::filesystem::path const source_filepath,
                      std::filesystem::path const object_filepath,
                      std::filesystem::path const depend_filepath,
-                     std::vector<std::string> common_flags)
+                     std::vector<std::string> common_flags,
+                     std::shared_ptr<format_data> formatting)
 {
   return thread_pool.add_job([source_filepath,
                               object_filepath,
                               depend_filepath,
                               common_flags,
+                              formatting,
                               &tool_file,
                               &thread_pool]() -> std::optional<std::string> {
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
 
-    threadsafe_print(
-      std::format("compiling C file: <{}>\n", relative_source_path.string()));
+    threadsafe_print(std::format("({:{}}/{:{}}) compiling C file: <{}>\n",
+                                 formatting->counter++,
+                                 formatting->num_digits,
+                                 formatting->total_num,
+                                 formatting->num_digits,
+                                 relative_source_path.string()));
 
     auto const [exit_code, what] = run_command(
       tool_file.cc,
@@ -168,18 +189,29 @@ start_c_compile_task(ThreadPool& thread_pool,
 }
 
 static std::string
-emit_symcache_contents(std::string_view package_name,
-                       version_triplet const trip)
+emit_symcache_contents(std::string_view package_name, SemVer const& version)
 {
-  auto const [x, y, z] = trip;
-
   std::string out;
 
   out += std::format("int __hewg_version_package_{}[3] = {{ {}, {}, {} }};\n",
                      package_name,
-                     x,
-                     y,
-                     z);
+                     version.major(),
+                     version.minor(),
+                     version.patch());
+
+  if (auto const pre = version.prerelease())
+    out +=
+      std::format("char const* __hewg_prerelease_package_hewg = \"{}\";", *pre);
+  else
+    out += std::format(
+      "char const* __hewg_prerelease_package_hewg = (char const*)0;", *pre);
+
+  if (auto const meta = version.metadata())
+    out +=
+      std::format("char const* __hewg_metadata_package_hewg = \"{}\";", *meta);
+  else
+    out += std::format(
+      "char const* __hewg_metadata_package_hewg = (char const*)0;", *meta);
 
   using namespace std::chrono;
 
@@ -193,14 +225,19 @@ emit_symcache_contents(std::string_view package_name,
 
 std::filesystem::path
 compile_hewgsym(ConfigurationFile const& config,
-                ToolFile const& tools,
+                TargetFile const& tools,
                 bool PIC)
 {
   auto const object_file_name =
     PIC ? hewg_builtinsym_obj_pic_path : hewg_builtinsym_obj_path;
 
+  auto const version = parse_semver(config.project.version);
+  if (not version)
+    throw std::runtime_error(
+      "invalid project version while attempting to create hewgsym table");
+
   std::ofstream(hewg_builtinsym_src_path)
-    << emit_symcache_contents(config.project.name, config.project.version);
+    << emit_symcache_contents(config.project.name, *version);
 
   std::vector<std::string> args;
   args.push_back("-O2");
@@ -245,7 +282,7 @@ std::pair<std::vector<std::filesystem::path>,
           std::vector<std::future<std::optional<std::string>>>>
 compile_cxx(ThreadPool& threads,
             ConfigurationFile const& config,
-            ToolFile const& tools,
+            TargetFile const& tools,
             std::filesystem::path const& cache_folder,
             bool const release,
             bool const PIC)
@@ -273,6 +310,13 @@ compile_cxx(ThreadPool& threads,
     threadsafe_print_verbose(std::format("CXX flags: {}", cxx_flags_fmt));
   }
 
+  auto const num = cxx_rebuilds.size();
+  auto const digits = std::ceil(std::log10(num));
+  std::shared_ptr<format_data> formatting(new format_data);
+  formatting->counter = 1;
+  formatting->total_num = num;
+  formatting->num_digits = digits;
+
   std::vector<std::future<std::optional<std::string>>> awaits;
 
   for (auto const& rebuild : cxx_rebuilds) {
@@ -285,7 +329,8 @@ compile_cxx(ThreadPool& threads,
                                             rebuild,
                                             object_filepath,
                                             depend_filepath,
-                                            cxx_flags));
+                                            cxx_flags,
+                                            formatting));
   }
 
   return std::pair{ cxx_objects, std::move(awaits) };
@@ -295,7 +340,7 @@ std::pair<std::vector<std::filesystem::path>,
           std::vector<std::future<std::optional<std::string>>>>
 compile_c(ThreadPool& threads,
           ConfigurationFile const& config,
-          ToolFile const& tools,
+          TargetFile const& tools,
           std::filesystem::path const& cache_folder,
           bool const release,
           bool const PIC)
@@ -323,14 +368,27 @@ compile_c(ThreadPool& threads,
     threadsafe_print_verbose(std::format("C flags: {}", c_flags_fmt));
   }
 
+  auto const num = c_rebuilds.size();
+  auto const digits = std::ceil(std::log10(num));
+  std::shared_ptr<format_data> formatting(new format_data);
+  formatting->counter = 1;
+  formatting->total_num = num;
+  formatting->num_digits = digits;
+
   std::vector<std::future<std::optional<std::string>>> awaits;
 
   for (auto const& rebuild : c_rebuilds) {
     auto const object_file = object_file_for_c(cache_folder, rebuild);
     auto const depend_file = depfile_for_c(cache_folder, rebuild);
 
-    awaits.push_back(start_c_compile_task(
-      threads, config, tools, rebuild, object_file, depend_file, c_flags));
+    awaits.push_back(start_c_compile_task(threads,
+                                          config,
+                                          tools,
+                                          rebuild,
+                                          object_file,
+                                          depend_file,
+                                          c_flags,
+                                          formatting));
   }
 
   return { c_objects, std::move(awaits) };

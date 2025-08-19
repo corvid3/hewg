@@ -1,35 +1,94 @@
 #pragma once
 
+#include <compare>
 #include <filesystem>
+#include <jayson.hh>
 #include <list>
 #include <memory>
 #include <optional>
 #include <scl.hh>
+#include <set>
 
-#include "confs.hh"
+#include "common.hh"
+#include "semver.hh"
+#include "target.hh"
 
-struct PackageIdentifier
+// versions must be an exact match
+class PackageIdentifier
 {
+public:
+  // TODO: parse
+  // PackageIdentifier(std::string_view text);
+
   PackageIdentifier(std::string_view name,
-                    version_triplet version,
-                    bool const exact_version)
-    : name(std::string(name))
-    , version(version)
-    , exact_version(exact_version) {};
+                    std::string_view org,
+                    TargetTriplet target,
+                    SemVer version)
+    : m_name(name)
+    , m_org(org)
+    , m_target(target)
+    , m_version(version) {};
 
-  explicit PackageIdentifier(Dependency const d)
-    : name(d.name)
-    , version(d.version)
-    , exact_version(d.exact) {};
+  std::partial_ordering operator<=>(PackageIdentifier const&) const;
+  bool operator<(PackageIdentifier const&) const = default;
+  bool operator==(PackageIdentifier const&) const = default;
 
-  bool operator==(PackageIdentifier const& rhs) const
+  auto name() const { return m_name; }
+  auto org() const { return m_org; }
+  auto target() const { return m_target; }
+  auto version() const { return m_version; }
+
+private:
+  std::string m_name;
+  std::string m_org;
+  TargetTriplet m_target;
+  SemVer m_version;
+
+public:
+  using jayson_fields =
+    std::tuple<jayson::obj_field<"name", &PackageIdentifier::m_name>,
+               jayson::obj_field<"org", &PackageIdentifier::m_org>,
+               jayson::obj_field<"target", &PackageIdentifier::m_target>,
+               jayson::obj_field<"version", &PackageIdentifier::m_version>>;
+
+  static bool constexpr jayson_explicitly_constructible = true;
+};
+
+std::string
+format_package_identifier();
+
+class DependencyIdentifier
+{
+public:
+  enum class Sort
   {
-    return name == rhs.name and version == version;
-  }
+    Exact,
+    ThisOrBetter,
+  };
 
-  std::string name;
-  version_triplet version;
-  bool exact_version;
+  DependencyIdentifier(std::string_view name,
+                       std::string_view org,
+                       Sort sort,
+                       SemVer semver,
+                       TargetTriplet target)
+    : m_name(name)
+    , m_org(org)
+    , m_sort(sort)
+    , m_semver(semver)
+    , m_target(target) {};
+
+  auto name() const { return m_name; }
+  auto org() const { return m_org; }
+  auto sort() const { return m_sort; }
+  auto semver() const { return m_semver; }
+  auto target() const { return m_target; }
+
+private:
+  std::string m_name;
+  std::string m_org;
+  Sort m_sort;
+  SemVer m_semver;
+  TargetTriplet m_target;
 };
 
 // a packages stripped down version
@@ -38,16 +97,15 @@ struct PackageInfo
 {
   MetaConf meta;
   ProjectConf project;
-  std::vector<Dependency> internal_deps;
-  std::vector<Dependency> external_deps;
+  DependenciesConf depends;
 
   using scl_fields = std::tuple<>;
-  using scl_recurse =
-    std::tuple<scl::field<&PackageInfo::meta, "hewg">,
-               scl::field<&PackageInfo::project, "project">,
-               scl::field<&PackageInfo::internal_deps, "internal">,
-               scl::field<&PackageInfo::external_deps, "external">>;
+  using scl_recurse = std::tuple<scl::field<&PackageInfo::meta, "hewg">,
+                                 scl::field<&PackageInfo::project, "project">,
+                                 scl::field<&PackageInfo::depends, "depends">>;
 };
+
+using PackageCacheDB = std::set<PackageIdentifier>;
 
 struct Package
 {
@@ -57,22 +115,28 @@ struct Package
   std::list<std::shared_ptr<Package>> internal_dependencies;
 };
 
-struct VersionManifest
-{
-  std::string name;
-  std::vector<std::tuple<int, int, int>> versions;
+// struct ResolvedDependencies
+// {
+//   std::vector<PackageInfo> packages_to_link;
+//   std::vector<PackageInfo> packages_to_include;
+// };
 
-  using jayson_fields =
-    std::tuple<jayson::obj_field<"name", &VersionManifest::name>,
-               jayson::obj_field<"versions", &VersionManifest::versions>>;
-};
+// std::vector<ResolvedDependencies>
+// resolve_deps(ConfigurationFile const& config);
 
-// attempts to open the directory
-// where the version of a specific
-// package lives
-std::optional<std::filesystem::path>
-try_get_compatable_package(std::string_view name,
-                           version_triplet requested_version);
+// attempts to select a semver compatable package identifier
+// from a dependency identifier and the installed pacakges
+// on the system
+// if no suitable package identifier can be selected,
+// returns nullopt
+std::optional<PackageIdentifier> select_package_from_dependency_identifier(
+  DependencyIdentifier);
+
+void
+build_dependency_tree(ConfigurationFile const& config);
+
+std::filesystem::path
+get_package_directory(PackageIdentifier const&);
 
 // version is exact
 std::shared_ptr<Package>
@@ -80,17 +144,27 @@ construct_dependency_graph(std::string_view package_name,
                            version_triplet version);
 
 PackageInfo
-get_package_info(std::string_view name, version_triplet requested_version);
+get_package_info(PackageIdentifier dep);
 
-VersionManifest
-open_version_manifest(std::string_view package_name);
+PackageCacheDB
+open_package_db();
 
 void
-write_version_manifest(std::string_view package_name,
-                       VersionManifest const& manifest);
+save_package_db(PackageCacheDB const&);
 
-// returns the directory where the version
-// of the hewg project is stored
+// creates a directory for a specific instance of a package
+// in the filesystem, and then registers it into the package DB
 std::filesystem::path
-add_version_to_package(std::string_view package_name,
-                       version_triplet const version_triplet);
+create_package_instance(PackageCacheDB& db, PackageIdentifier);
+
+template<>
+struct std::formatter<PackageIdentifier> : std::formatter<std::string>
+{
+  auto format(PackageIdentifier const& ver, format_context& ctx) const
+  {
+    return formatter<string>::format(
+      std::format(
+        "{}.{}-{}:{}", ver.org(), ver.name(), ver.version(), ver.target()),
+      ctx);
+  }
+};

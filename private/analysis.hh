@@ -9,7 +9,8 @@
 #include <span>
 #include <vector>
 
-#include "confs.hh"
+#include "packages.hh"
+#include "target.hh"
 
 enum class FileType
 {
@@ -22,6 +23,13 @@ enum class FileType
 
 FileType
 translate_filename_to_filetype(std::filesystem::path const s);
+
+// identifiers rely on triplet, so you need to pass one
+PackageIdentifier
+get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet);
+
+std::filesystem::path
+get_artifact_folder(PackageIdentifier const& ident);
 
 std::string
 get_c_standard_string(int std);
@@ -41,13 +49,8 @@ std::string
 dynamic_library_name_for_project(ConfigurationFile const& config);
 
 std::filesystem::path
-get_target_folder_for_build_profile(std::string_view const profile);
+get_cache_folder(std::string_view target_name, bool release, bool pic);
 
-std::filesystem::path
-get_cache_folder(std::string_view build_profile, bool release, bool pic);
-
-// converts a source-path source file
-// to it's cache-path object file
 std::filesystem::path
 object_file_for_cxx(std::filesystem::path cache_folder,
                     std::filesystem::path in);
@@ -83,11 +86,3 @@ mark_c_files_for_rebuild(std::filesystem::path cache_folder,
 std::vector<std::filesystem::path>
 mark_cxx_files_for_rebuild(std::filesystem::path cache_folder,
                            std::span<std::filesystem::path const> sources);
-
-bool
-semantically_valid(version_triplet const request_for,
-                   version_triplet const we_have);
-
-std::optional<version_triplet>
-select_best_compatable_semver(std::span<version_triplet const> list,
-                              version_triplet const requested);

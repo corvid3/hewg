@@ -1,11 +1,9 @@
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <jayson.hh>
 #include <optional>
 #include <ranges>
@@ -20,7 +18,6 @@
 #include <variant>
 #include <vector>
 
-#include "analysis.hh"
 #include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
@@ -35,18 +32,6 @@
 // i don't want to see m'code squandered...
 
 // auto const link_step_messages = { "now, let's get linking..." };
-
-static std::string
-get_build_profile(std::span<std::string const> bares)
-{
-  if (bares.size() == 0) {
-    return "default";
-  } else if (bares.size() == 1)
-    return bares[0];
-  else
-    throw std::runtime_error(
-      "when passing a build profile, cannot specify more than one!");
-}
 
 static void
 clean(ThreadPool&,
@@ -107,8 +92,7 @@ try {
     auto const dur = duration<long>(__hewg_build_date_package_hewg);
     auto const since_epoch = time_point<utc_clock, seconds>(dur);
 
-    threadsafe_print(std::format("version <{}>\n",
-                                 version_triplet_to_string(this_hewg_version)));
+    threadsafe_print(std::format("version <{}>\n", this_hewg_version));
     threadsafe_print(std::format("built <{}> UTC\n", since_epoch));
 
     return 0;
@@ -123,11 +107,17 @@ try {
       std::cout << terse::print_usage<BuildOptions>() << std::endl,
         std::exit(0);
 
-    auto const profile = get_build_profile(bares);
-    ConfigurationFile const config =
-      get_config_file(tl_options, config_path, profile);
+    ConfigurationFile const config = get_config_file(tl_options, config_path);
+    auto const target_triplet =
+      TargetTriplet(options.target.value_or(THIS_TARGET));
+    auto const target_file = get_target_file(target_triplet);
 
-    build(thread_pool, config, options, profile);
+    // build_dependency_tree(config);
+
+    build(thread_pool, config, target_file, options);
+
+    if (options.install)
+      install(config, target_triplet, options);
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
 
@@ -135,9 +125,7 @@ try {
       std::cout << terse::print_usage<CleanOptions>() << std::endl,
         std::exit(0);
 
-    auto const profile = get_build_profile(bares);
-    ConfigurationFile const config =
-      get_config_file(tl_options, config_path, profile);
+    ConfigurationFile const config = get_config_file(tl_options, config_path);
 
     clean(thread_pool, config, options, bares);
   } else if (std::holds_alternative<InitOptions>(scmds)) {
@@ -147,17 +135,6 @@ try {
       std::cout << terse::print_usage<InitOptions>() << std::endl, std::exit(0);
 
     init(options, bares);
-  } else if (std::holds_alternative<InstallOptions>(scmds)) {
-    auto options = std::get<InstallOptions>(scmds);
-
-    if (options.help)
-      std::cout << terse::print_usage<InstallOptions>() << std::endl,
-        std::exit(0);
-
-    auto const profile = get_build_profile(bares);
-    ConfigurationFile const config =
-      get_config_file(tl_options, config_path, profile);
-    install(config, options, profile);
   }
 } catch (std::exception const& e) {
   threadsafe_print("ERROR: ", e.what(), '\n');

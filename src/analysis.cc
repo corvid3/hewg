@@ -13,7 +13,9 @@
 #include "common.hh"
 #include "confs.hh"
 #include "depfile.hh"
+#include "packages.hh"
 #include "paths.hh"
+#include "semver.hh"
 
 FileType
 translate_filename_to_filetype(std::filesystem::path const s)
@@ -33,6 +35,24 @@ translate_filename_to_filetype(std::filesystem::path const s)
     return FileType::CXXHeader;
 
   throw std::runtime_error("unknown filetype in sources");
+}
+
+PackageIdentifier
+get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet)
+{
+  auto const version = parse_semver(config.project.version);
+  if (not version)
+    throw std::runtime_error("invalid project semver while attempting to "
+                             "create this packages identifier");
+
+  return PackageIdentifier(
+    config.project.name, config.project.org, triplet, *version);
+}
+
+std::filesystem::path
+get_artifact_folder(PackageIdentifier const& ident)
+{
+  return hewg_target_directory_path / ident.target().to_string();
 }
 
 std::string
@@ -135,10 +155,10 @@ get_target_folder_for_build_profile(std::string_view const profile)
 }
 
 std::filesystem::path
-get_cache_folder(std::string_view build_profile, bool release, bool pic)
+get_cache_folder(std::string_view target_name, bool release, bool pic)
 {
   auto const inner = std::format(
-    "{}{}{}", build_profile, pic ? "-pic" : "", release ? "-rel" : "");
+    "{}{}{}", target_name, pic ? "-pic" : "", release ? "-rel" : "");
 
   auto const folder = hewg_cache_path / "incremental" / inner;
 
@@ -361,27 +381,6 @@ mark_cxx_files_for_rebuild(std::filesystem::path const cache_folder,
   std::vector<Depfile> const depfiles =
     get_dependencies_for_cxx(cache_folder, sources);
   return mark_c_cxx_files_for_rebuild(sources, depfiles);
-}
-
-bool
-semantically_valid(version_triplet const request_for,
-                   version_triplet const we_have)
-{
-  auto const [rmaj, rmin, rpat] = request_for;
-  auto const [wmaj, wmin, wpat] = we_have;
-
-  // major version must match exactly
-  if (rmaj != wmaj)
-    return false;
-
-  // provided minor version must be at least
-  // equal to or greater than the requested version
-  if (rmin > wmin)
-    return false;
-
-  // patch versions don't play a role
-  // in selecting
-  return true;
 }
 
 std::optional<version_triplet>

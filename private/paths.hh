@@ -34,4 +34,5 @@ auto const hewg_target_directory_path =
 
 auto const user_hewg_directory = get_home_directory() / ".hewg";
 auto const hewg_packages_directory = user_hewg_directory / "packages";
+auto const hewg_package_db_path = user_hewg_directory / "package_db.json";
 auto const hewg_bin_directory = user_hewg_directory / "bin";

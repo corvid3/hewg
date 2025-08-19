@@ -5,6 +5,7 @@
 #include <future>
 
 #include "confs.hh"
+#include "target.hh"
 #include "thread_pool.hh"
 
 /*
@@ -22,7 +23,7 @@ std::pair<std::vector<std::filesystem::path>,
           std::vector<std::future<std::optional<std::string>>>>
 compile_cxx(ThreadPool& pool,
             ConfigurationFile const& config,
-            ToolFile const& tools,
+            TargetFile const& tools,
             std::filesystem::path const& cache_folder,
             bool const release,
             bool const PIC);
@@ -31,7 +32,7 @@ std::pair<std::vector<std::filesystem::path>,
           std::vector<std::future<std::optional<std::string>>>>
 compile_c(ThreadPool& pool,
           ConfigurationFile const& config,
-          ToolFile const& tools,
+          TargetFile const& tools,
           std::filesystem::path const& cache_folder,
           bool const release,
           bool const PIC);
@@ -40,5 +41,5 @@ compile_c(ThreadPool& pool,
 // and returns a path to it
 std::filesystem::path
 compile_hewgsym(ConfigurationFile const& config,
-                ToolFile const& tools,
+                TargetFile const& tools,
                 bool PIC);

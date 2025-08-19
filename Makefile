@@ -47,7 +47,7 @@ else
 CXXFLAGS+=-O0 -g
 endif
 
-LDLIBS=-lscl
+LDLIBS=-lscl -ldatalogpp
 LDFLAGS=
 
 SRCS=src/main.cc \
@@ -64,6 +64,8 @@ SRCS=src/main.cc \
 	src/install.cc \
 	src/packages.cc \
 	src/hooks.cc \
+	src/semver.cc \
+	src/target.cc \
 	src/jayson.cc
 
 CSRCS=csrc/bootstrap_version.c

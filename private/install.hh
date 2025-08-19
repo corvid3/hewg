@@ -1,11 +1,10 @@
 #pragma once
 
-#include <filesystem>
-
 #include "cmdline.hh"
 #include "confs.hh"
+#include "target.hh"
 
 void
 install(ConfigurationFile const& config,
-        InstallOptions const& options,
-        std::string_view profile);
+        TargetTriplet target,
+        BuildOptions const& options);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "confs.hh"
+#include "semver.hh"
 #include "thread_pool.hh"
 #include <algorithm>
 #include <array>
@@ -11,6 +11,7 @@
 #include <iostream>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -20,12 +21,14 @@
 
 using namespace std::string_view_literals;
 
+using version_triplet = std::tuple<int, int, int>;
+
 extern "C" int __hewg_version_package_hewg[3];
+extern "C" char const* __hewg_prerelease_package_hewg;
+extern "C" char const* __hewg_metadata_package_hewg;
 extern "C" long __hewg_build_date_package_hewg;
 
-inline version_triplet this_hewg_version = { __hewg_version_package_hewg[0],
-                                             __hewg_version_package_hewg[1],
-                                             __hewg_version_package_hewg[2] };
+SemVer const inline this_hewg_version{ 0, 4, 0, std::nullopt, std::nullopt };
 
 template<typename T>
 class atomic_vec
@@ -108,7 +111,7 @@ operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
   return out;
 }
 
-static inline std::mutex stdout_mutex;
+inline std::mutex stdout_mutex;
 
 inline std::string_view
 get_color_by_thread_id()
