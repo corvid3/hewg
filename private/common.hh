@@ -1,7 +1,5 @@
 #pragma once
 
-#include "semver.hh"
-#include "thread_pool.hh"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -18,6 +16,9 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#include "semver.hh"
+#include "thread_pool.hh"
 
 using namespace std::string_view_literals;
 
@@ -66,6 +67,9 @@ public:
   }
 };
 
+std::vector<std::string_view>
+split_by_delim(std::string_view const, char const delim);
+
 template<typename T, std::convertible_to<T>... As>
 auto
 make_array(As const&... vals) -> std::array<T, sizeof...(As)>
@@ -113,35 +117,28 @@ operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
 
 inline std::mutex stdout_mutex;
 
-inline std::string_view
+// full saturation
+// 0 -> 360
+std::tuple<int, int, int>
+hsv_to_rgb(float const degrees);
+
+inline std::string
 get_color_by_thread_id()
 {
   if (thread_id == MAIN_THREAD_ID)
     return "\x1b[39;49m";
 
-  // reasonbly ok way to get
-  // a pseudorandom number for each core
-  unsigned v = unsigned((std::pow(2, 31) - 1) / (thread_id + 50));
-  v %= 6;
+  float const pct = (thread_id) / (float)num_tasks;
+  [[maybe_unused]] auto [r, g, b] = hsv_to_rgb(300. * pct);
+  r = std::min(255, r + 50);
+  g = std::min(255, g + 50);
+  b = std::min(255, b + 50);
 
-  switch (v) {
-    case 0:
-      return "\x1b[31;49m";
-    case 1:
-      return "\x1b[32;49m";
-    case 2:
-      return "\x1b[33;49m";
-    case 3:
-      return "\x1b[34;49m";
-    case 4:
-      return "\x1b[35;49m";
-    case 5:
-      return "\x1b[36;49m";
-    default:
-      throw std::runtime_error("???");
-  }
+  return std::format("\x1b[38;2;{};{};{}m",
+                     (unsigned char)r,
+                     (unsigned char)g,
 
-  std::unreachable();
+                     (unsigned char)b);
 }
 
 inline void

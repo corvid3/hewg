@@ -14,6 +14,7 @@ using task_t = std::function<void()>;
 
 constexpr int MAIN_THREAD_ID = -1;
 thread_local inline int thread_id = MAIN_THREAD_ID;
+inline int num_tasks = 0;
 
 class ThreadPool
 {

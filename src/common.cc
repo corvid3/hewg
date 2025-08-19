@@ -1,13 +1,32 @@
 #include "common.hh"
+#include "thread_pool.hh"
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <mutex>
+#include <print>
 #include <pwd.h>
 #include <regex>
 #include <thread>
 #include <unistd.h>
+
+std::vector<std::string_view>
+split_by_delim(std::string_view const in, char const delim)
+{
+  std::vector<std::string_view> out;
+  size_t count{};
+
+  do {
+    auto const found = in.substr(count, in.find(delim));
+    out.push_back(found);
+    count += found.size();
+  } while (count != in.size());
+
+  return out;
+}
 
 void
 create_directory_checked(std::filesystem::path const what)
@@ -95,3 +114,65 @@ check_valid_project_identifier(std::string_view name)
 
   return std::regex_search(name.begin(), name.end(), name_validation);
 }
+
+bool
+epsilon_float(float const lhs, float const rhs)
+{
+  return std::abs(lhs - rhs) < 0.01;
+}
+
+std::tuple<int, int, int>
+hsv_to_rgb(float degrees)
+{
+  while (degrees >= 360)
+    degrees -= 360;
+
+  if (degrees < 0)
+    throw std::runtime_error("negative value given to hsv_to_rgb");
+
+  // =x, +y, 0
+  if (degrees < 60)
+    return { 255, std::lerp(0, 255, degrees / 60), 0 };
+
+  // -x, =y, 0
+  if (degrees < 120)
+    return { std::lerp(255, 0, (degrees - 60) / 60), 255, 0 };
+
+  // 0, =y, +z
+  if (degrees < 180)
+    return { 0, 255, std::lerp(0, 255, (degrees - 120) / 60) };
+
+  // 0, -y, =z
+  if (degrees < 240)
+    return { 0, std::lerp(255, 0, (degrees - 180) / 60), 255 };
+
+  // +x, 0, =z
+  if (degrees < 300)
+    return { std::lerp(0, 255, (degrees - 240) / 60), 0, 255 };
+
+  // =x, 0, -z
+  if (degrees <= 360)
+    return { 255, 0, std::lerp(255, 0, (degrees - 300) / 60) };
+
+  std::println("hsv_to_rgb bug");
+  return { 0, 0, 0 };
+};
+
+// std::string
+// get_color_by_thread_id()
+// {
+//   if (thread_id == MAIN_THREAD_ID)
+//     return "\x1b[39;49m";
+
+//   // auto const static num_threads = std::thread::hardware_concurrency();
+
+//   // auto const pct = (thread_id + 1) / num_threads;
+
+//   // auto const [r, g, b] = hsv_to_rgb(300. / pct);
+//   return {};
+
+//   // return std::format("\x1b[38;2;{};{};{}m",
+//   //                    (unsigned char)r,
+//   //                    (unsigned char)g,
+//   //                    (unsigned char)b);
+// }

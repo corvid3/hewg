@@ -1,9 +1,13 @@
+#include <algorithm>
 #include <charconv>
 #include <compare>
 #include <lexible.hh>
+#include <numeric>
 #include <optional>
+#include <ranges>
 #include <regex>
 
+#include "common.hh"
 #include "semver.hh"
 
 auto constexpr static semver_regex_str =
@@ -45,6 +49,13 @@ parse_semver(std::string_view what)
                 unwrap_str(metadata_text));
 };
 
+static bool
+num_only(std::string_view const in)
+{
+  return std::ranges::fold_left(
+    in, true, [](bool fold, char const in) { return fold & isdigit(in); });
+}
+
 std::strong_ordering
 SemVer::operator<=>(SemVer const& rhs) const
 {
@@ -68,15 +79,87 @@ SemVer::operator<=>(SemVer const& rhs) const
     return std::strong_ordering::less;
 
   if (lhs_pre and rhs_pre) {
+    auto const lhs_segments = split_by_delim(*lhs_pre, '.');
+    auto const rhs_segments = split_by_delim(*rhs_pre, '.');
 
-    auto const num_only = [](auto const& in) {
-      return std::ranges::fold_left(
-        in, true, [](bool fold, char const in) { return fold & isdigit(in); });
+    auto const compare_sections =
+      [](std::string_view lhs,
+         std::string_view rhs) static -> std::strong_ordering {
+      auto const lhs_num_only = num_only(lhs);
+      auto const rhs_num_only = num_only(rhs);
+
+      // short circuits for numbers compared with ascii
+      if (lhs_num_only and not rhs_num_only)
+        return std::strong_ordering::less;
+      if (not lhs_num_only and rhs_num_only)
+        return std::strong_ordering::greater;
+
+      // compare numerically
+      if (lhs_num_only and rhs_num_only) {
+        int lhs_val;
+        int rhs_val;
+
+        std::from_chars(lhs.begin(), lhs.end(), lhs_val);
+        std::from_chars(rhs.begin(), rhs.end(), rhs_val);
+
+        return lhs_val <=> rhs_val;
+      }
+
+      // identifiers are compared ascii
+      auto const name_min = std::min(lhs.size(), rhs.size());
+      for (auto const& i : std::ranges::iota_view(name_min)) {
+        auto const lhs_c = lhs[i];
+        auto const rhs_c = rhs[i];
+
+        if (lhs_c < rhs_c)
+          return std::strong_ordering::less;
+        if (lhs_c > rhs_c)
+          return std::strong_ordering::greater;
+      }
+
+      return std::strong_ordering::equal;
     };
 
-    if (num_only(*lhs_pre) and num_only(*rhs_pre)) {
+    // if one prerelease has more fields than the other...
+    if (lhs_segments.size() != rhs_segments.size()) {
+      // get the end of the shortest prerelease
+      auto const end = lhs_segments.size() < rhs_segments.size()
+                         ? lhs_segments.end()
+                         : rhs_segments.end();
+
+      // try to find the first mismatch,
+      // if its at the end of the shortest prerelease, then the
+      // longer prerelease is greater.
+      if (std::ranges::mismatch(lhs_segments, rhs_segments).in1 == end)
+        return lhs_segments.size() < rhs_segments.size()
+                 ? std::strong_ordering::less
+                 : std::strong_ordering::greater;
+
+      for (auto const i : std::ranges::iota_view(
+             std::min(lhs_segments.size(), rhs_segments.size()))) {
+        auto const lhs_segment = lhs_segments[i];
+        auto const rhs_segment = rhs_segments[i];
+
+        auto const comparison = compare_sections(lhs_segment, rhs_segment);
+        if (comparison == std::strong_ordering::less or
+            comparison == std::strong_ordering::greater)
+          return comparison;
+      }
+
+    } else {
+      for (auto const i : std::ranges::iota_view(lhs_segments.size())) {
+        auto const lhs_segment = lhs_segments[i];
+        auto const rhs_segment = rhs_segments[i];
+
+        auto const comparison = compare_sections(lhs_segment, rhs_segment);
+        if (comparison == std::strong_ordering::less or
+            comparison == std::strong_ordering::greater)
+          return comparison;
+      }
     }
   }
+
+  // disregard metadata
 
   return std::strong_ordering::equivalent;
 }

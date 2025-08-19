@@ -85,6 +85,7 @@ try {
   // TODO: change this with an argument
   threadsafe_print_verbose(
     std::format("using <{}> tasks\n", tl_options.num_tasks));
+  num_tasks = tl_options.num_tasks;
   ThreadPool thread_pool(tl_options.num_tasks);
 
   if (tl_options.print_version) {
