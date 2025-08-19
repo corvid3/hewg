@@ -123,13 +123,9 @@ std::tuple<int, int, int>
 hsv_to_rgb(float const degrees);
 
 inline std::string
-get_color_by_thread_id()
+hsv_terminal_colorize(float pct)
 {
-  if (thread_id == MAIN_THREAD_ID)
-    return "\x1b[39;49m";
-
-  float const pct = (thread_id) / (float)num_tasks;
-  [[maybe_unused]] auto [r, g, b] = hsv_to_rgb(300. * pct);
+  auto [r, g, b] = hsv_to_rgb(300. * pct);
   r = std::min(255, r + 50);
   g = std::min(255, g + 50);
   b = std::min(255, b + 50);
@@ -137,8 +133,24 @@ get_color_by_thread_id()
   return std::format("\x1b[38;2;{};{};{}m",
                      (unsigned char)r,
                      (unsigned char)g,
-
                      (unsigned char)b);
+};
+
+inline std::string
+greyscale_terminal_colorize(float const pct)
+{
+  int const val = std::min<int>(255, 255 * pct);
+  return std::format("\x1b[38;2;{};{};{}m", val, val, val);
+}
+
+inline std::string
+get_color_by_thread_id()
+{
+  if (thread_id == MAIN_THREAD_ID)
+    return "\x1b[39;49m";
+
+  float const pct = (thread_id) / (float)num_tasks;
+  return hsv_terminal_colorize(pct);
 }
 
 inline void

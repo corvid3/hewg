@@ -124,7 +124,11 @@ start_cxx_compile_task(ThreadPool& thread_pool,
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
 
-    threadsafe_print(std::format("({:{}}/{:{}}) compiling CXX file: <{}>\n",
+    auto const pct =
+      formatting->counter / (float)formatting->total_num * 0.5 + 0.5;
+
+    threadsafe_print(std::format("({}{:{}}\x1b[39m/{:{}}) [CXX] <{}>\n",
+                                 greyscale_terminal_colorize(pct),
                                  formatting->counter++,
                                  formatting->num_digits,
                                  formatting->total_num,
@@ -166,7 +170,11 @@ start_c_compile_task(ThreadPool& thread_pool,
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
 
-    threadsafe_print(std::format("({:{}}/{:{}}) compiling C file: <{}>\n",
+    auto const pct =
+      formatting->counter / (float)formatting->total_num * 0.5 + 0.5;
+
+    threadsafe_print(std::format("({}{:{}}\x1b[39m/{:{}}) [C] <{}>\n",
+                                 greyscale_terminal_colorize(pct),
                                  formatting->counter++,
                                  formatting->num_digits,
                                  formatting->total_num,
