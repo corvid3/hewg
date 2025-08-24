@@ -46,7 +46,7 @@ get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet)
                              "create this packages identifier");
 
   return PackageIdentifier(
-    config.project.name, config.project.org, triplet, *version);
+    config.project.org, config.project.name, *version, triplet);
 }
 
 std::filesystem::path

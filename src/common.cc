@@ -1,7 +1,9 @@
 #include "common.hh"
 #include "thread_pool.hh"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <compare>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -12,6 +14,26 @@
 #include <regex>
 #include <thread>
 #include <unistd.h>
+
+std::strong_ordering
+compare_ascii(std::string_view lhs, std::string_view rhs)
+{
+  if (lhs.size() < rhs.size())
+    return std::strong_ordering::less;
+  else if (lhs.size() > rhs.size())
+    return std::strong_ordering::greater;
+
+  for (auto i = 0; i < (int)lhs.size(); i++) {
+    auto const l = lhs[i];
+    auto const r = rhs[i];
+    if (l < r)
+      return std::strong_ordering::less;
+    if (l > r)
+      return std::strong_ordering::greater;
+  }
+
+  return std::strong_ordering::equal;
+};
 
 std::vector<std::string_view>
 split_by_delim(std::string_view const in, char const delim)

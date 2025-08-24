@@ -1,9 +1,9 @@
 [hewg]
-version = "0.3.0"
+version = "0.4.0"
 type = "executable"
 
 [project]
-version = "0.3.0"
+version = "0.4.0"
 org = "crow"
 name = "hewg"
 description = "compiler build system and management software"
@@ -20,10 +20,19 @@ lto = true
 strip = true
 
 [libraries]
-native = { "scl" "datalogpp" }
+native = { 
+    "scl" 
+    "datalogpp" 
+}
 
 [depends]
-internal = { }
+internal = {
+    ">=crow.scl-0.1.0"
+    ">=crow.jayson-0.1.0"
+    ">=crow.lexible-0.1.0"
+    ">=crow.datalogpp-0.1.0"
+}
+
 external = { }
 
 # default values for cxx

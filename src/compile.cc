@@ -82,6 +82,25 @@ struct format_data
   std::atomic<int> counter;
 };
 
+static void
+print_status(format_data& formatting,
+             std::string_view const language,
+             std::filesystem::path const file)
+{
+  auto const pct = formatting.counter / (float)formatting.total_num * 0.5 + 0.4;
+
+  threadsafe_print(
+    std::format("({}{:{}}\x1b[39m/\x1b[38;2;230;230;230m{:{}}\x1b[39m) "
+                "[\x1b[2m{}\x1b[22m] {}\n",
+                greyscale_terminal_colorize(pct),
+                formatting.counter++,
+                formatting.num_digits,
+                formatting.total_num,
+                formatting.num_digits,
+                language,
+                file.string()));
+}
+
 // static void
 // write_error_file(std::filesystem::path src_file, std::string_view what)
 // {
@@ -124,16 +143,7 @@ start_cxx_compile_task(ThreadPool& thread_pool,
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
 
-    auto const pct =
-      formatting->counter / (float)formatting->total_num * 0.5 + 0.5;
-
-    threadsafe_print(std::format("({}{:{}}\x1b[39m/{:{}}) [CXX] <{}>\n",
-                                 greyscale_terminal_colorize(pct),
-                                 formatting->counter++,
-                                 formatting->num_digits,
-                                 formatting->total_num,
-                                 formatting->num_digits,
-                                 relative_source_path.string()));
+    print_status(*formatting, "CXX", relative_source_path);
 
     auto const [exit_code, what] = run_command(
       tool_file.cxx,
@@ -170,16 +180,7 @@ start_c_compile_task(ThreadPool& thread_pool,
     auto const relative_source_path =
       std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
 
-    auto const pct =
-      formatting->counter / (float)formatting->total_num * 0.5 + 0.5;
-
-    threadsafe_print(std::format("({}{:{}}\x1b[39m/{:{}}) [C] <{}>\n",
-                                 greyscale_terminal_colorize(pct),
-                                 formatting->counter++,
-                                 formatting->num_digits,
-                                 formatting->total_num,
-                                 formatting->num_digits,
-                                 relative_source_path.string()));
+    print_status(*formatting, "C", relative_source_path);
 
     auto const [exit_code, what] = run_command(
       tool_file.cc,

@@ -8,19 +8,15 @@
 #include <regex>
 
 #include "common.hh"
+#include "packages.hh"
 #include "semver.hh"
-
-auto constexpr static semver_regex_str =
-  R"(^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$)";
-
-static const std::regex semver_regex(semver_regex_str);
 
 std::optional<SemVer>
 parse_semver(std::string_view what)
 {
   std::cmatch matches;
-  if (not std::regex_match(what.begin(), what.end(), matches, semver_regex))
-    throw std::runtime_error("invalid semver");
+  if (not std::regex_match(what.begin(), what.end(), matches, regexes::semver))
+    return std::nullopt;
 
   auto const major_text = matches[1];
   auto const minor_text = matches[2];
@@ -106,18 +102,7 @@ SemVer::operator<=>(SemVer const& rhs) const
       }
 
       // identifiers are compared ascii
-      auto const name_min = std::min(lhs.size(), rhs.size());
-      for (auto const& i : std::ranges::iota_view(name_min)) {
-        auto const lhs_c = lhs[i];
-        auto const rhs_c = rhs[i];
-
-        if (lhs_c < rhs_c)
-          return std::strong_ordering::less;
-        if (lhs_c > rhs_c)
-          return std::strong_ordering::greater;
-      }
-
-      return std::strong_ordering::equal;
+      return compare_ascii(lhs, rhs);
     };
 
     // if one prerelease has more fields than the other...

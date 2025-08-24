@@ -13,23 +13,31 @@
 #include "semver.hh"
 #include "target.hh"
 
-// versions must be an exact match
+namespace regexes {
+
+std::regex inline const org("^[a-zA-Z]+$");
+std::regex inline const name("^[a-zA-Z0-9]+$");
+std::regex inline const semver(
+  R"(^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$)");
+std::regex inline const target(
+  "^([a-zA-Z0-9]+)-([a-zA-Z0-9]+)-([a-zA-Z0-9]+)$");
+
+};
+
+// org.name-version:target
 class PackageIdentifier
 {
 public:
-  // TODO: parse
-  // PackageIdentifier(std::string_view text);
+  PackageIdentifier(std::string_view org,
+                    std::string_view name,
+                    SemVer version,
+                    TargetTriplet target)
+    : m_org(org)
+    , m_name(name)
+    , m_version(version)
+    , m_target(target) {};
 
-  PackageIdentifier(std::string_view name,
-                    std::string_view org,
-                    TargetTriplet target,
-                    SemVer version)
-    : m_name(name)
-    , m_org(org)
-    , m_target(target)
-    , m_version(version) {};
-
-  std::partial_ordering operator<=>(PackageIdentifier const&) const;
+  std::strong_ordering operator<=>(PackageIdentifier const&) const;
   bool operator<(PackageIdentifier const&) const = default;
   bool operator==(PackageIdentifier const&) const = default;
 
@@ -39,23 +47,22 @@ public:
   auto version() const { return m_version; }
 
 private:
-  std::string m_name;
   std::string m_org;
-  TargetTriplet m_target;
+  std::string m_name;
   SemVer m_version;
+  TargetTriplet m_target;
 
 public:
   using jayson_fields =
-    std::tuple<jayson::obj_field<"name", &PackageIdentifier::m_name>,
-               jayson::obj_field<"org", &PackageIdentifier::m_org>,
-               jayson::obj_field<"target", &PackageIdentifier::m_target>,
-               jayson::obj_field<"version", &PackageIdentifier::m_version>>;
+    std::tuple<jayson::obj_field<"org", &PackageIdentifier::m_org>,
+               jayson::obj_field<"name", &PackageIdentifier::m_name>,
+               jayson::obj_field<"version", &PackageIdentifier::m_version>,
+               jayson::obj_field<"target", &PackageIdentifier::m_target>>;
 
   static bool constexpr jayson_explicitly_constructible = true;
 };
 
-std::string
-format_package_identifier();
+std::optional<PackageIdentifier> parse_package_identifier(std::string_view);
 
 class DependencyIdentifier
 {
@@ -66,43 +73,71 @@ public:
     ThisOrBetter,
   };
 
-  DependencyIdentifier(std::string_view name,
-                       std::string_view org,
-                       Sort sort,
-                       SemVer semver,
-                       TargetTriplet target)
-    : m_name(name)
-    , m_org(org)
-    , m_sort(sort)
-    , m_semver(semver)
-    , m_target(target) {};
+  DependencyIdentifier(Sort const sort, PackageIdentifier const ident)
+    : m_sort(sort)
+    , m_packageIdentifier(ident) {};
 
-  auto name() const { return m_name; }
-  auto org() const { return m_org; }
   auto sort() const { return m_sort; }
-  auto semver() const { return m_semver; }
-  auto target() const { return m_target; }
+  auto const& packageIdentifier() const { return m_packageIdentifier; }
+
+  std::partial_ordering operator<=>(DependencyIdentifier const&) const;
 
 private:
-  std::string m_name;
-  std::string m_org;
   Sort m_sort;
-  SemVer m_semver;
-  TargetTriplet m_target;
+  PackageIdentifier m_packageIdentifier;
+
+  struct SortDescriptor;
+
+public:
+  using jayson_fields = std::tuple<
+    jayson::enum_field<"sort", &DependencyIdentifier::m_sort, SortDescriptor>,
+    jayson::obj_field<"identifier",
+                      &DependencyIdentifier::m_packageIdentifier>>;
+  static bool constexpr jayson_explicitly_constructible = true;
 };
 
-// a packages stripped down version
-// of a projects hewg.scl
+std::string_view sort_to_string(DependencyIdentifier::Sort);
+
+struct DependencyIdentifier::SortDescriptor
+{
+  std::optional<Sort> static deserialize(std::string_view in)
+  {
+    if (in == "=")
+      return DependencyIdentifier::Sort::Exact;
+
+    else if (in == ">=")
+      return DependencyIdentifier::Sort::ThisOrBetter;
+
+    else
+      return std::nullopt;
+  }
+
+  std::string static serialize(Sort const in)
+  {
+    return std::string(sort_to_string(in));
+  }
+};
+
+std::optional<DependencyIdentifier> parse_dependency_identifier(
+  std::string_view);
+
 struct PackageInfo
 {
-  MetaConf meta;
-  ProjectConf project;
-  DependenciesConf depends;
+  PackageIdentifier this_identifier;
+  std::string package_type;
 
-  using scl_fields = std::tuple<>;
-  using scl_recurse = std::tuple<scl::field<&PackageInfo::meta, "hewg">,
-                                 scl::field<&PackageInfo::project, "project">,
-                                 scl::field<&PackageInfo::depends, "depends">>;
+  std::set<DependencyIdentifier> internal_dependencies;
+  std::set<DependencyIdentifier> external_dependencies;
+
+  using jayson_fields =
+    std::tuple<jayson::obj_field<"identifier", &PackageInfo::this_identifier>,
+               jayson::obj_field<"type", &PackageInfo::package_type>,
+               jayson::obj_field<"internal_dependencies",
+                                 &PackageInfo::internal_dependencies>,
+               jayson::obj_field<"external_dependencies",
+                                 &PackageInfo::external_dependencies>>;
+
+  static bool constexpr jayson_explicitly_constructible = true;
 };
 
 using PackageCacheDB = std::set<PackageIdentifier>;
@@ -132,8 +167,12 @@ struct Package
 std::optional<PackageIdentifier> select_package_from_dependency_identifier(
   DependencyIdentifier);
 
+// creates and verifies the dependency tree
+// for this hewg project
 void
-build_dependency_tree(ConfigurationFile const& config);
+build_dependency_tree(ConfigurationFile const& config,
+                      PackageCacheDB& db,
+                      TargetTriplet const& this_target);
 
 std::filesystem::path
 get_package_directory(PackageIdentifier const&);
@@ -143,7 +182,7 @@ std::shared_ptr<Package>
 construct_dependency_graph(std::string_view package_name,
                            version_triplet version);
 
-PackageInfo
+std::optional<PackageInfo>
 get_package_info(PackageIdentifier dep);
 
 PackageCacheDB

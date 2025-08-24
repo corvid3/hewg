@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <compare>
 #include <concepts>
 #include <filesystem>
 #include <fstream>
@@ -66,6 +67,8 @@ public:
     return m_vec.size();
   }
 };
+
+std::strong_ordering compare_ascii(std::string_view, std::string_view);
 
 std::vector<std::string_view>
 split_by_delim(std::string_view const, char const delim);
@@ -165,7 +168,7 @@ threadsafe_print(auto const&... v)
 
   std::string thread_fmt;
   if (thread_id != MAIN_THREAD_ID)
-    thread_fmt = std::format("(thread {})", thread_id);
+    thread_fmt = std::format("(thread {})", thread_id + 1);
   else
     thread_fmt = "(hewg)";
 

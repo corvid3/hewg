@@ -9,6 +9,7 @@
 #include "confs.hh"
 #include "hooks.hh"
 #include "link.hh"
+#include "packages.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
 
@@ -147,6 +148,7 @@ build_shared_library(ThreadPool& threads,
 void
 build(ThreadPool& threads,
       ConfigurationFile const& config,
+      PackageCacheDB& db,
       TargetFile const& target,
       BuildOptions const& build_opts)
 {
@@ -161,6 +163,7 @@ build(ThreadPool& threads,
 
   auto const ident = get_this_package_ident(config, target.triplet);
   auto const emit_dir = get_artifact_folder(ident);
+  build_dependency_tree(config, db, target.triplet);
 
   switch (config.meta.type) {
     case ProjectType::Executable:

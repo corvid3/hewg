@@ -51,6 +51,9 @@ select_executable(PackageCacheDB const& db,
   auto const package_dir = get_package_directory(package_ident);
   auto const exe_path = package_dir / package_ident.name();
 
+  if (std::filesystem::exists(hewg_bin_directory / package_ident.name()))
+    std::filesystem::remove(hewg_bin_directory / package_ident.name());
+
   std::filesystem::create_symlink(exe_path,
                                   hewg_bin_directory / package_ident.name());
 }
@@ -117,13 +120,13 @@ install_library(ConfigurationFile const& config,
 
 void
 install(ConfigurationFile const& config,
+        PackageCacheDB& db,
         TargetTriplet const target,
         BuildOptions const&)
 {
   auto const package_ident = get_this_package_ident(config, target);
 
   ensure_user_hewg_directory();
-  auto db = open_package_db();
 
   auto const install_directory = create_package_instance(db, package_ident);
 

@@ -1,5 +1,6 @@
 #include <lexible.hh>
 
+#include "packages.hh"
 #include "target.hh"
 
 TargetTriplet::TargetTriplet(std::string_view arch,
@@ -10,9 +11,9 @@ TargetTriplet::TargetTriplet(std::string_view arch,
   , m_vendor(vendor)
 {
   auto const verify = [](std::string_view in) {
-    std::regex static const check("^[a-zA-Z]+$");
+    std::regex static const check("^[a-zA-Z0-9]+$");
     if (not std::regex_match(in.begin(), in.end(), check))
-      throw std::runtime_error("target triplet may only contain [a-zA-Z]+");
+      throw std::runtime_error("target triplet may only contain [a-zA-Z0-9]+");
   };
 
   verify(arch);
@@ -22,12 +23,9 @@ TargetTriplet::TargetTriplet(std::string_view arch,
 
 TargetTriplet::TargetTriplet(std::string_view in)
 {
-  std::regex static const parse(
-    "^([a-zA-Z0-9]+)-([a-zA-Z0-9]+)-([a-zA-Z0-9]+)$");
-
   std::cmatch matches;
 
-  if (not std::regex_match(in.begin(), in.end(), matches, parse))
+  if (not std::regex_match(in.begin(), in.end(), matches, regexes::target))
     throw std::runtime_error("invalid targettriplet parse");
 
   m_architecture = matches[1].str();

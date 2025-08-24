@@ -24,6 +24,7 @@
 #include "confs.hh"
 #include "init.hh"
 #include "install.hh"
+#include "packages.hh"
 #include "paths.hh"
 #include "thread_pool.hh"
 
@@ -115,10 +116,12 @@ try {
 
     // build_dependency_tree(config);
 
-    build(thread_pool, config, target_file, options);
+    auto db = open_package_db();
+
+    build(thread_pool, config, db, target_file, options);
 
     if (options.install)
-      install(config, target_triplet, options);
+      install(config, db, target_triplet, options);
   } else if (std::holds_alternative<CleanOptions>(scmds)) {
     auto options = std::get<CleanOptions>(scmds);
 
