@@ -7,6 +7,7 @@
 #include <iterator>
 #include <jayson.hh>
 #include <optional>
+#include <print>
 #include <scl.hh>
 #include <stdexcept>
 #include <string_view>
@@ -288,8 +289,14 @@ struct DepTreeCtx
   */
 
   Interpreter interpreter;
-  Predicate &package, &dependency, &dependency_path, &static_to_static_deps,
-    &exists_extern, &dependency_cycle, &extern_chain;
+  Predicate &package, &dependency, &dependency_path,
+    &repeat_dependency_siblings, &static_to_static_deps, &exists_extern,
+    &dependency_cycle, &extern_chain;
+
+  /*
+    repeat_dependency_siblings
+      * for when a package X appears next to eachother in a graph
+  */
 
   DepTreeCtx()
     : interpreter()
@@ -309,6 +316,8 @@ struct DepTreeCtx
                                                    "EXT" }
                                          .size()))
     , dependency_path(interpreter.predicate("DependencyPath", 8))
+    , repeat_dependency_siblings(
+        interpreter.predicate("RepeatDependencySiblings", 0))
     , static_to_static_deps(
         interpreter.predicate("StaticToStaticDependencies", 0))
     , exists_extern(interpreter.predicate("ExistsExternalDependency", 0))
@@ -317,49 +326,53 @@ struct DepTreeCtx
   {
     using namespace datalogpp;
 
+    repeat_dependency_siblings() = "Dependency"_p("ORG"_V,
+                                                  "NAME"_V,
+                                                  "VERSION"_V,
+                                                  "TARGET"_V,
+                                                  "C_ORG"_V,
+                                                  "C_NAME"_V,
+                                                  "C_VERSION"_V,
+                                                  "C_TARGET"_V,
+                                                  "_"_V,
+                                                  "_"_V) +
+                                   "Dependency"_p("ORG"_V,
+                                                  "NAME"_V,
+                                                  "VERSION"_V,
+                                                  "TARGET"_V,
+                                                  "C_ORG"_V,
+                                                  "C_NAME"_V,
+                                                  "D_VERSION"_V,
+                                                  "D_TARGET"_V,
+                                                  "_"_V,
+                                                  "_"_V) +
+                                   Inequality("D_VERSION"_V, "C_VERSION"_V) +
+                                   Inequality("D_TARGET"_V, "C_TARGET"_V);
+
     static_to_static_deps() =
-      ("Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "static"),
-       "Dependency"_p("ORG"_V,
-                      "NAME"_V,
-                      "VERSION"_V,
-                      "TARGET"_V,
-                      "C_ORG"_V,
-                      "C_NAME"_V,
-                      "C_VERSION"_V,
-                      "C_TARGET"_V,
-                      "_"_V,
-                      "_"_V),
-       "Package"_p(
-         "C_ORG"_V, "C_NAME"_V, "C_VERSION"_V, "C_TARGET"_V, "static"));
+      "Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "static") +
+      "Dependency"_p("ORG"_V,
+                     "NAME"_V,
+                     "VERSION"_V,
+                     "TARGET"_V,
+                     "C_ORG"_V,
+                     "C_NAME"_V,
+                     "C_VERSION"_V,
+                     "C_TARGET"_V,
+                     "_"_V,
+                     "_"_V) +
+      "Package"_p("C_ORG"_V, "C_NAME"_V, "C_VERSION"_V, "C_TARGET"_V, "static");
 
-    exists_extern() = ("Dependency"_p("_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "_"_V,
-                                      "external"));
-
-    dependency_path("P_ORG"_V,
-                    "P_NAME"_V,
-                    "P_VERSION"_V,
-                    "P_TARGET"_V,
-                    "C_ORG"_V,
-                    "C_NAME"_V,
-                    "C_VERSION"_V,
-                    "C_TARGET"_V) = ("Dependency"_p("P_ORG"_V,
-                                                    "P_NAME"_V,
-                                                    "P_VERSION"_V,
-                                                    "P_TARGET"_V,
-                                                    "C_ORG"_V,
-                                                    "C_NAME"_V,
-                                                    "C_VERSION"_V,
-                                                    "C_TARGET"_V,
-                                                    "_"_V,
-                                                    "_"_V));
+    exists_extern() = "Dependency"_p("_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "_"_V,
+                                     "external");
 
     dependency_path("P_ORG"_V,
                     "P_NAME"_V,
@@ -368,26 +381,44 @@ struct DepTreeCtx
                     "C_ORG"_V,
                     "C_NAME"_V,
                     "C_VERSION"_V,
-                    "C_TARGET"_V) = ("Dependency"_p("P_ORG"_V,
-                                                    "P_NAME"_V,
-                                                    "P_VERSION"_V,
-                                                    "P_TARGET"_V,
-                                                    "I_ORG"_V,
-                                                    "I_NAME"_V,
-                                                    "I_VERSION"_V,
-                                                    "I_TARGET"_V,
-                                                    "_"_V,
-                                                    "_"_V),
-                                     "Dependency"_p("I_ORG"_V,
-                                                    "I_NAME"_V,
-                                                    "I_VERSION"_V,
-                                                    "I_TARGET"_V,
-                                                    "C_ORG"_V,
-                                                    "C_NAME"_V,
-                                                    "C_VERSION"_V,
-                                                    "C_TARGET"_V,
-                                                    "_"_V,
-                                                    "_"_V));
+                    "C_TARGET"_V) = "Dependency"_p("P_ORG"_V,
+                                                   "P_NAME"_V,
+                                                   "P_VERSION"_V,
+                                                   "P_TARGET"_V,
+                                                   "C_ORG"_V,
+                                                   "C_NAME"_V,
+                                                   "C_VERSION"_V,
+                                                   "C_TARGET"_V,
+                                                   "_"_V,
+                                                   "_"_V);
+
+    dependency_path("P_ORG"_V,
+                    "P_NAME"_V,
+                    "P_VERSION"_V,
+                    "P_TARGET"_V,
+                    "C_ORG"_V,
+                    "C_NAME"_V,
+                    "C_VERSION"_V,
+                    "C_TARGET"_V) = "Dependency"_p("P_ORG"_V,
+                                                   "P_NAME"_V,
+                                                   "P_VERSION"_V,
+                                                   "P_TARGET"_V,
+                                                   "I_ORG"_V,
+                                                   "I_NAME"_V,
+                                                   "I_VERSION"_V,
+                                                   "I_TARGET"_V,
+                                                   "_"_V,
+                                                   "_"_V) +
+                                    "Dependency"_p("I_ORG"_V,
+                                                   "I_NAME"_V,
+                                                   "I_VERSION"_V,
+                                                   "I_TARGET"_V,
+                                                   "C_ORG"_V,
+                                                   "C_NAME"_V,
+                                                   "C_VERSION"_V,
+                                                   "C_TARGET"_V,
+                                                   "_"_V,
+                                                   "_"_V);
 
     dependency_cycle() = "DependencyPath"_p(
       "ORG"_V, "NAME"_V, "_"_V, "_"_V, "ORG"_V, "NAME"_V, "_"_V, "_"_V);
@@ -399,16 +430,16 @@ struct DepTreeCtx
                  "C_ORG"_V,
                  "C_NAME"_V,
                  "C_VERSION"_V,
-                 "C_TARGET"_V) = ("Dependency"_p("P_ORG"_V,
-                                                 "P_NAME"_V,
-                                                 "P_VERSION"_V,
-                                                 "P_TARGET"_V,
-                                                 "C_ORG"_V,
-                                                 "C_NAME"_V,
-                                                 "C_VERSION"_V,
-                                                 "C_TARGET"_V,
-                                                 "_"_V,
-                                                 "external"));
+                 "C_TARGET"_V) = "Dependency"_p("P_ORG"_V,
+                                                "P_NAME"_V,
+                                                "P_VERSION"_V,
+                                                "P_TARGET"_V,
+                                                "C_ORG"_V,
+                                                "C_NAME"_V,
+                                                "C_VERSION"_V,
+                                                "C_TARGET"_V,
+                                                "_"_V,
+                                                "external");
 
     extern_chain("P_ORG"_V,
                  "P_NAME"_V,
@@ -417,26 +448,26 @@ struct DepTreeCtx
                  "C_ORG"_V,
                  "C_NAME"_V,
                  "C_VERSION"_V,
-                 "C_TARGET"_V) = ("Dependency"_p("P_ORG"_V,
-                                                 "P_NAME"_V,
-                                                 "P_VERSION"_V,
-                                                 "P_TARGET"_V,
-                                                 "I_ORG"_V,
-                                                 "I_NAME"_V,
-                                                 "I_VERSION"_V,
-                                                 "I_TARGET"_V,
-                                                 "_"_V,
-                                                 "external"_V),
-                                  "Dependency"_p("I_ORG"_V,
-                                                 "I_NAME"_V,
-                                                 "I_VERSION"_V,
-                                                 "I_TARGET"_V,
-                                                 "C_ORG"_V,
-                                                 "C_NAME"_V,
-                                                 "C_VERSION"_V,
-                                                 "C_TARGET"_V,
-                                                 "_"_V,
-                                                 "external"_V));
+                 "C_TARGET"_V) = "Dependency"_p("P_ORG"_V,
+                                                "P_NAME"_V,
+                                                "P_VERSION"_V,
+                                                "P_TARGET"_V,
+                                                "I_ORG"_V,
+                                                "I_NAME"_V,
+                                                "I_VERSION"_V,
+                                                "I_TARGET"_V,
+                                                "_"_V,
+                                                "external"_V) +
+                                 "Dependency"_p("I_ORG"_V,
+                                                "I_NAME"_V,
+                                                "I_VERSION"_V,
+                                                "I_TARGET"_V,
+                                                "C_ORG"_V,
+                                                "C_NAME"_V,
+                                                "C_VERSION"_V,
+                                                "C_TARGET"_V,
+                                                "_"_V,
+                                                "external"_V);
 
     // package("crow", "scl", "0.3.0", "x86-linux-gnu", "static") = {};
     // package("crow", "lexible", "0.4.0", "x86-linux-gnu", "static") = {};
@@ -471,17 +502,17 @@ struct DepTreeCtx
                    std::string_view name,
                    std::string_view version,
                    std::string_view target,
-                   std::string_view package_type)
+                   PackageType const package_type)
   {
     package(std::string(org),
             std::string(name),
             std::string(version),
             std::string(target),
-            std::string(package_type)) = {};
+            std::string(project_type_to_string(package_type))) = {};
   }
 
   void add_package(PackageIdentifier const& ident,
-                   std::string_view package_type)
+                   PackageType const package_type)
   {
     add_package(ident.org(),
                 ident.name(),
@@ -532,7 +563,7 @@ add_to_dependency_tree(DepTreeCtx& ctx,
     throw std::runtime_error(
       std::format("package {} does not contain a manifest.json?", identifier));
 
-  ctx.add_package(identifier, this_package_info->package_type);
+  ctx.add_package(identifier, this_package_info->type);
 
   for (auto const& internal : this_package_info->internal_dependencies) {
     auto const internal_identifier = internal.packageIdentifier();
@@ -547,7 +578,7 @@ add_to_dependency_tree(DepTreeCtx& ctx,
   }
 }
 
-void
+DeptreeOutput
 build_dependency_tree(ConfigurationFile const& config,
                       PackageCacheDB& db,
                       TargetTriplet const& this_target)
@@ -558,15 +589,17 @@ build_dependency_tree(ConfigurationFile const& config,
     get_this_package_ident(config, this_target);
   visited_packages.insert(this_package_identifier);
 
-  for (auto const& x : db)
-    std::println("{}", x.name());
+  /*
 
-  // add this package
+    add packages to the tree,
+    and also the dependencies as edges
+
+  */
   ctx.add_package(config.project.org,
                   config.project.name,
                   config.project.version,
-                  project_type_to_string(config.meta.type),
-                  this_target.to_string());
+                  this_target.to_string(),
+                  config.meta.type);
 
   for (auto const& internal : config.depends.internal) {
     auto const dependency_identifier = parse_dependency_identifier(internal);
@@ -598,17 +631,156 @@ build_dependency_tree(ConfigurationFile const& config,
     ctx.add_dependency(this_package_identifier, *dependency_identifier, true);
   }
 
-  // run the datalog engine!
-  // for large trees, this is where all of the
-  // perf goes
+  /*
+    run the datalog engine!
+    for large trees, this is where all of the
+    perf goes
+  */
   ctx.interpreter.infer();
-
   std::cout << ctx.interpreter.dump_facts();
 
-  // auto& package = dl.predicate("package", 4);
-  // package("foo", "3.14.0", "static", "external") = {};
-  // auto& external = dl.predicate("external", 1);
-  // external("X"_V) = ("package"_p("X"_V, "Y"_V, "Z"_V, "external"));
+  /*
+    checks!
+  */
+
+  using namespace datalogpp;
+
+  {
+    /*
+      simple, easy to rule out stuff
+    */
+
+    if (ctx.interpreter.query(std::array{ "StaticToStaticDependencies"_p() })
+          .size() != 0)
+      throw std::runtime_error(
+        "static to static dependencies are currently not allowed by hewg");
+
+    // sibling dependencies that which share the same org and name,
+    // perhaps differing in version are disallowed
+    if (ctx.interpreter.query(std::array{ "RepeatDependencySiblings"_p() })
+          .size() != 0)
+      throw std::runtime_error(
+        "a dependency is repeated as a sibling somewhere in the tree");
+
+    if (ctx.interpreter.query(std::array{ "ExistsExternalDependency"_p() })
+          .size() != 0)
+      throw std::runtime_error(
+        "external dependencies are currently not allowed by hewg");
+
+    if (ctx.interpreter.query(std::array{ "DependencyCycle"_p() }).size() != 0)
+      throw std::runtime_error("loop detected in package depedency graph");
+  }
+
+  {
+    /*
+      more complicated checks against the versions...
+    */
+
+    /*
+      assert that there are no = dependencies,
+      as they are disallowed currently
+    */
+
+    /*
+      NOTE:
+        currently, shared libraries are unsupported
+        re-exportation is also unsupported
+        therefore, there are very few checks we need to make
+    */
+
+    auto const packages = ctx.interpreter.query(std::array{
+      "Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "_"_V) });
+
+    auto const equal_versions = ctx.interpreter.query(std::array{
+      "Dependency"_p(
+        "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "=", "_"_V),
+    });
+
+    auto const greater_versions = ctx.interpreter.query(std::array{
+      "Dependency"_p(
+        "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, ">=", "_"_V),
+    });
+
+    if (equal_versions.size() != 0)
+      throw std::runtime_error(
+        "equal dependency versions are currently not allowed by hewg");
+  }
+
+  auto const this_package_deps = ctx.interpreter.query(std::array{
+    "Dependency"_p(this_package_identifier.org(),
+                   this_package_identifier.name(),
+                   std::format("{}", this_package_identifier.version()),
+                   this_package_identifier.target().to_string(),
+                   "CHILD_ORG"_V,
+                   "CHILD_NAME"_V,
+                   "CHILD_VERSION"_V,
+                   "CHILD_TARGET"_V,
+                   "DEPENDS"_V,
+                   "EXT"_V) });
+
+  auto const this_package_header_deps = ctx.interpreter.query(std::array{
+    "Dependency"_p(this_package_identifier.org(),
+                   this_package_identifier.name(),
+                   std::format("{}", this_package_identifier.version()),
+                   this_package_identifier.target().to_string(),
+                   "CHILD_ORG"_V,
+                   "CHILD_NAME"_V,
+                   "CHILD_VERSION"_V,
+                   "CHILD_TARGET"_V,
+                   "DEPENDS"_V,
+                   "EXT"_V),
+    "Package"_p("CHILD_ORG"_V,
+                "CHILD_NAME"_V,
+                "CHILD_VERSION"_V,
+                "CHILD_TARGET"_V,
+                "headers") });
+
+  auto const this_package_static_dependencies =
+    ctx.interpreter.query(std::array{
+      "Dependency"_p(this_package_identifier.org(),
+                     this_package_identifier.name(),
+                     std::format("{}", this_package_identifier.version()),
+                     this_package_identifier.target().to_string(),
+                     "CHILD_ORG"_V,
+                     "CHILD_NAME"_V,
+                     "CHILD_VERSION"_V,
+                     "CHILD_TARGET"_V,
+                     "DEPENDS"_V,
+                     "EXT"_V),
+      "Package"_p("CHILD_ORG"_V,
+                  "CHILD_NAME"_V,
+                  "CHILD_VERSION"_V,
+                  "CHILD_TARGET"_V,
+                  "library") });
+
+  DeptreeOutput output;
+
+  for (auto const& subst : this_package_static_dependencies) {
+    auto const org = subst.at("CHILD_ORG"_V);
+    auto const name = subst.at("CHILD_NAME"_V);
+    auto const version = subst.at("CHILD_VERSION"_V);
+    auto const target = subst.at("CHILD_TARGET"_V);
+
+    auto const identifier = PackageIdentifier(
+      org, name, *parse_semver(version), TargetTriplet(target));
+
+    output.include_packages.insert(identifier);
+    output.link_packages.insert(identifier);
+  }
+
+  for (auto const& subst : this_package_header_deps) {
+    auto const org = subst.at("CHILD_ORG"_V);
+    auto const name = subst.at("CHILD_NAME"_V);
+    auto const version = subst.at("CHILD_VERSION"_V);
+    auto const target = subst.at("CHILD_TARGET"_V);
+
+    auto const identifier = PackageIdentifier(
+      org, name, *parse_semver(version), TargetTriplet(target));
+
+    output.include_packages.insert(identifier);
+  }
+
+  return output;
 }
 
 std::filesystem::path
@@ -627,6 +799,24 @@ get_package_info(PackageIdentifier const ident)
 
   std::string const&& data = read_file(info_conf);
   return jayson::deserialize<PackageInfo>(jayson::val::parse(std::move(data)));
+}
+
+std::filesystem::path
+get_packages_include_directory(PackageIdentifier const& ident)
+{
+  return get_package_directory(ident) / "include";
+}
+
+std::filesystem::path
+get_packages_static_library_file(PackageIdentifier const& ident,
+                                 bool const is_pic)
+{
+  auto const root = get_package_directory(ident);
+
+  if (is_pic)
+    return root / std::format("lib{}-PIE.a", ident.name());
+  else
+    return root / std::format("lib{}.a", ident.name());
 }
 
 PackageCacheDB

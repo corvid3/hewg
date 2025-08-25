@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <stdexcept>
 #include <vector>
 
@@ -48,14 +49,20 @@ build_c_cxx(ThreadPool& threads,
             ConfigurationFile const& config,
             TargetFile const& tools,
             std::filesystem::path const& cache,
+            DeptreeOutput const& deptree,
             bool const release,
             bool const pic)
 {
+  std::vector<std::filesystem::path> include_dirs;
+
+  for (auto const& ident : deptree.include_packages)
+    include_dirs.push_back(get_packages_include_directory(ident));
+
   auto [cxx_object_files, cxx_futures] =
-    compile_cxx(threads, config, tools, cache, release, pic);
+    compile_cxx(threads, config, tools, cache, include_dirs, release, pic);
 
   auto [c_object_files, c_futures] =
-    compile_c(threads, config, tools, cache, release, pic);
+    compile_c(threads, config, tools, cache, include_dirs, release, pic);
 
   auto const obj_files = cxx_object_files + c_object_files;
   auto futures = std::move(cxx_futures) + std::move(c_futures);
@@ -86,17 +93,19 @@ build_executable(ThreadPool& threads,
                  ConfigurationFile const& config,
                  TargetFile const& target,
                  BuildOptions const& build_opts,
+                 DeptreeOutput const& deptree,
                  std::filesystem::path const& emit_dir)
 {
   // auto const include_dirs = get_include_directories_for_packages(config);
   auto const cache =
     get_cache_folder(target.triplet.to_string(), build_opts.release, false);
-  auto object_files =
-    build_c_cxx(threads, config, target, cache, build_opts.release, false);
+
+  auto object_files = build_c_cxx(
+    threads, config, target, cache, deptree, build_opts.release, false);
 
   object_files.push_back(compile_hewgsym(config, target, false));
 
-  link_executable(config, target, build_opts, object_files, emit_dir);
+  link_executable(config, target, build_opts, deptree, object_files, emit_dir);
 
   if (build_opts.release)
     run_command("strip", "-s", (emit_dir / config.project.name).string());
@@ -107,6 +116,7 @@ build_static_library(ThreadPool& threads,
                      ConfigurationFile const& config,
                      TargetFile const& target,
                      BuildOptions const& build_opts,
+                     DeptreeOutput const& deptree,
                      std::filesystem::path const& emit_dir)
 {
 
@@ -114,8 +124,13 @@ build_static_library(ThreadPool& threads,
     auto const non_pic_cache =
       get_cache_folder(target.triplet.to_string(), build_opts.release, false);
     threadsafe_print("building non-PIC library code...");
-    auto const object_files = build_c_cxx(
-      threads, config, target, non_pic_cache, build_opts.release, false);
+    auto const object_files = build_c_cxx(threads,
+                                          config,
+                                          target,
+                                          non_pic_cache,
+                                          deptree,
+                                          build_opts.release,
+                                          false);
     pack_static_library(config, target, object_files, emit_dir, false);
   }
 
@@ -123,8 +138,8 @@ build_static_library(ThreadPool& threads,
     auto const pic_cache =
       get_cache_folder(target.triplet.to_string(), build_opts.release, true);
     threadsafe_print("building PIC library code...");
-    auto const object_files =
-      build_c_cxx(threads, config, target, pic_cache, build_opts.release, true);
+    auto const object_files = build_c_cxx(
+      threads, config, target, pic_cache, deptree, build_opts.release, true);
     pack_static_library(config, target, object_files, emit_dir, true);
   }
 }
@@ -134,15 +149,16 @@ build_shared_library(ThreadPool& threads,
                      ConfigurationFile const& config,
                      TargetFile const& target,
                      BuildOptions const& build_opts,
+                     DeptreeOutput const& deptree,
                      std::filesystem::path const& emit_dir)
 {
   auto const cache =
     get_cache_folder(target.triplet.to_string(), build_opts.release, true);
 
-  auto object_files =
-    build_c_cxx(threads, config, target, cache, build_opts.release, true);
+  auto object_files = build_c_cxx(
+    threads, config, target, cache, deptree, build_opts.release, true);
   object_files.push_back(compile_hewgsym(config, target, true));
-  shared_link(config, target, build_opts, object_files, emit_dir);
+  shared_link(config, target, build_opts, deptree, object_files, emit_dir);
 }
 
 void
@@ -163,25 +179,28 @@ build(ThreadPool& threads,
 
   auto const ident = get_this_package_ident(config, target.triplet);
   auto const emit_dir = get_artifact_folder(ident);
-  build_dependency_tree(config, db, target.triplet);
+
+  auto const deptree = build_dependency_tree(config, db, target.triplet);
 
   switch (config.meta.type) {
-    case ProjectType::Executable:
-      build_executable(threads, config, target, build_opts, emit_dir);
+    case PackageType::Executable:
+      build_executable(threads, config, target, build_opts, deptree, emit_dir);
       break;
 
-    case ProjectType::StaticLibrary:
-      build_static_library(threads, config, target, build_opts, emit_dir);
+    case PackageType::StaticLibrary:
+      build_static_library(
+        threads, config, target, build_opts, deptree, emit_dir);
       break;
 
-    case ProjectType::SharedLibrary: {
-      build_shared_library(threads, config, target, build_opts, emit_dir);
+    case PackageType::SharedLibrary: {
+      build_shared_library(
+        threads, config, target, build_opts, deptree, emit_dir);
     } break;
 
       // header only projects
       // have nothing to compile,
       // just skip
-    case ProjectType::Headers:
+    case PackageType::Headers:
       return;
   }
 

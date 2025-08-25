@@ -131,18 +131,38 @@ install(ConfigurationFile const& config,
   auto const install_directory = create_package_instance(db, package_ident);
 
   {
-    auto const info_path = install_directory / "info.scl";
+    auto const info_path = install_directory / "manifest.json";
 
-    // we want just the meta & project information
-    scl::file file;
-    scl::serialize(config.meta, file, "hewg");
-    scl::serialize(config.project, file, "project");
+    std::set<DependencyIdentifier> internal, external;
+    std::ranges::transform(config.depends.internal,
+                           std::inserter(internal, internal.begin()),
+                           [](std::string_view in) static {
+                             auto const out = parse_dependency_identifier(in);
 
-    std::ofstream(info_path) << file.serialize();
+                             if (not out)
+                               throw std::runtime_error("how did we get here");
+
+                             return *out;
+                           });
+
+    std::ranges::transform(config.depends.external,
+                           std::inserter(external, external.begin()),
+                           [](std::string_view in) static {
+                             auto const out = parse_dependency_identifier(in);
+
+                             if (not out)
+                               throw std::runtime_error("how did we get here");
+
+                             return *out;
+                           });
+
+    PackageInfo info{ package_ident, config.meta.type, internal, external };
+
+    std::ofstream(info_path) << jayson::serialize(info).serialize();
   }
 
   switch (config.meta.type) {
-    case ProjectType::Executable:
+    case PackageType::Executable:
       install_executable(config, package_ident, install_directory);
 
       // NOTE: maybe the end user doesn't want to immediately select the
@@ -151,16 +171,16 @@ install(ConfigurationFile const& config,
       select_executable(db, package_ident);
       break;
 
-    case ProjectType::StaticLibrary:
+    case PackageType::StaticLibrary:
       install_library(config, package_ident, install_directory);
       break;
 
-    case ProjectType::SharedLibrary:
+    case PackageType::SharedLibrary:
       throw std::runtime_error(
         "hewg does not support installing shared libraries");
       break;
 
-    case ProjectType::Headers:
+    case PackageType::Headers:
       install_headers(config, package_ident, install_directory);
       break;
   }

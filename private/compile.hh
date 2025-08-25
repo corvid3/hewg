@@ -25,6 +25,7 @@ compile_cxx(ThreadPool& pool,
             ConfigurationFile const& config,
             TargetFile const& tools,
             std::filesystem::path const& cache_folder,
+            std::span<std::filesystem::path const> include_directories,
             bool const release,
             bool const PIC);
 
@@ -34,6 +35,7 @@ compile_c(ThreadPool& pool,
           ConfigurationFile const& config,
           TargetFile const& tools,
           std::filesystem::path const& cache_folder,
+          std::span<std::filesystem::path const> include_directories,
           bool const release,
           bool const PIC);
 

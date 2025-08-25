@@ -6,6 +6,7 @@
 #include <future>
 #include <iterator>
 #include <jayson.hh>
+#include <memory>
 #include <optional>
 #include <span>
 
@@ -293,6 +294,7 @@ compile_cxx(ThreadPool& threads,
             ConfigurationFile const& config,
             TargetFile const& tools,
             std::filesystem::path const& cache_folder,
+            std::span<std::filesystem::path const> include_directories,
             bool const release,
             bool const PIC)
 {
@@ -308,7 +310,11 @@ compile_cxx(ThreadPool& threads,
 
   auto const cxx_rebuilds =
     mark_cxx_files_for_rebuild(cache_folder, cxx_filepaths);
-  auto const cxx_flags = generate_cxx_flags(config, release, PIC);
+  auto cxx_flags = generate_cxx_flags(config, release, PIC);
+
+  for (auto const& dir : include_directories)
+    cxx_flags.push_back(
+      std::format("-I{}", std::filesystem::absolute(dir).string()));
 
   {
     std::string cxx_flags_fmt;
@@ -351,6 +357,7 @@ compile_c(ThreadPool& threads,
           ConfigurationFile const& config,
           TargetFile const& tools,
           std::filesystem::path const& cache_folder,
+          std::span<std::filesystem::path const> include_directories,
           bool const release,
           bool const PIC)
 {
@@ -367,6 +374,10 @@ compile_c(ThreadPool& threads,
 
   auto const c_rebuilds = mark_c_files_for_rebuild(cache_folder, c_filepaths);
   auto c_flags = generate_c_flags(config, release, PIC);
+
+  for (auto const& dir : include_directories)
+    c_flags.push_back(
+      std::format("-I{}", std::filesystem::absolute(dir).string()));
 
   {
     std::string c_flags_fmt;

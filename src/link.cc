@@ -1,8 +1,11 @@
 
+#include "analysis.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
+#include "packages.hh"
 #include "target.hh"
+#include <filesystem>
 
 static auto
 generate_link_flags(ConfigurationFile const&,
@@ -36,11 +39,18 @@ generate_link_flags(ConfigurationFile const&,
 // this requires dependency resolvement...
 static auto
 get_library_flags(ConfigurationFile const& config,
-                  bool const ignore_static_libraries)
+                  DeptreeOutput const& deptree,
+                  bool const PIE)
 {
-  (void)ignore_static_libraries;
-
   std::vector<std::string> args;
+
+  for (auto const& ident : deptree.link_packages) {
+    args.push_back(std::format(
+      "{}",
+      std::filesystem::canonical(get_packages_static_library_file(ident, PIE))
+        .string()));
+  }
+
   args.push_back("-L/usr/local/lib");
 
   for (auto const& native_library : config.libs.native)
@@ -57,6 +67,7 @@ void
 link_executable(ConfigurationFile const& config,
                 TargetFile const& target,
                 BuildOptions const& options,
+                DeptreeOutput const& deptree,
                 std::span<std::filesystem::path const> object_files,
                 std::filesystem::path output_directory)
 {
@@ -67,8 +78,9 @@ link_executable(ConfigurationFile const& config,
 
   auto args = generate_link_flags(
     config, target, options.release, object_files, output_filepath);
+
   threadsafe_print("now lets get linking...\n");
-  append_vec(args, get_library_flags(config, false));
+  append_vec(args, get_library_flags(config, deptree, false));
 
   run_command(target.cxx, args);
 
@@ -91,8 +103,7 @@ pack_static_library(ConfigurationFile const& config,
       "output_directory in pack_static_library() isn't a directory");
 
   std::filesystem::path const outfile =
-    (PIC ? output_directory / std::format("lib{}.a", config.project.name)
-         : output_directory / std::format("PIClib{}.a", config.project.name));
+    output_directory / static_library_name_for_project(config, PIC);
 
   std::vector<std::string> commands;
   commands.push_back("rcs");
@@ -106,6 +117,7 @@ void
 shared_link(ConfigurationFile const& config,
             TargetFile const& target,
             BuildOptions const& options,
+            DeptreeOutput const& deptree,
             std::span<std::filesystem::path const> object_files,
             std::filesystem::path output_directory)
 {
@@ -122,7 +134,7 @@ shared_link(ConfigurationFile const& config,
   // ignore static libraries here
   // and defer their linking by adding them to the
   // descriptor of the package file
-  append_vec(args, get_library_flags(config, true));
+  append_vec(args, get_library_flags(config, deptree, true));
 
   args.push_back("-shared");
 

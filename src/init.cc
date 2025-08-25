@@ -176,20 +176,20 @@ init(InitOptions const& options, std::span<std::string const> bares)
   common_init(install_directory);
 
   switch (*project_type) {
-    case ProjectType::Executable:
+    case PackageType::Executable:
       init_executable(install_directory, project_name);
       break;
 
-    case ProjectType::StaticLibrary:
+    case PackageType::StaticLibrary:
       init_library(install_directory, project_name);
       init_library(install_directory, project_name);
       break;
 
-    case ProjectType::SharedLibrary:
+    case PackageType::SharedLibrary:
       init_shared(install_directory, project_name);
       break;
 
-    case ProjectType::Headers:
+    case PackageType::Headers:
       init_headers(install_directory, project_name);
       break;
   }

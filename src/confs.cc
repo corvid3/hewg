@@ -11,26 +11,26 @@
 #include "semver.hh"
 
 std::string_view
-project_type_to_string(ProjectType const t)
+project_type_to_string(PackageType const t)
 {
-  static const std::map<ProjectType, std::string> mapping = {
-    { ProjectType::Executable, "executable" },
-    { ProjectType::StaticLibrary, "library" },
-    { ProjectType::SharedLibrary, "dynlib" },
-    { ProjectType::Headers, "headers" },
+  static const std::map<PackageType, std::string> mapping = {
+    { PackageType::Executable, "executable" },
+    { PackageType::StaticLibrary, "library" },
+    { PackageType::SharedLibrary, "dynlib" },
+    { PackageType::Headers, "headers" },
   };
 
   return mapping.find(t)->second;
 }
 
-std::optional<ProjectType>
+std::optional<PackageType>
 project_type_from_string(std::string_view s)
 {
-  static const std::map<std::string, ProjectType, std::less<>> mapping = {
-    { "executable", ProjectType::Executable },
-    { "library", ProjectType::StaticLibrary },
-    { "dynlib", ProjectType::SharedLibrary },
-    { "headers", ProjectType::Headers },
+  static const std::map<std::string, PackageType, std::less<>> mapping = {
+    { "executable", PackageType::Executable },
+    { "library", PackageType::StaticLibrary },
+    { "dynlib", PackageType::SharedLibrary },
+    { "headers", PackageType::Headers },
   };
 
   auto const find = mapping.find(s);

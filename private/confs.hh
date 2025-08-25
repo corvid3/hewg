@@ -32,7 +32,7 @@ std::string inline version_triplet_to_string(version_triplet const t)
   return std::format("{}.{}.{}", x, y, z);
 }
 
-enum class ProjectType
+enum class PackageType
 {
   Executable,
   StaticLibrary,
@@ -42,11 +42,24 @@ enum class ProjectType
   Headers,
 };
 
-std::string_view project_type_to_string(ProjectType);
-std::optional<ProjectType> project_type_from_string(std::string_view);
+std::string_view project_type_to_string(PackageType);
+std::optional<PackageType> project_type_from_string(std::string_view);
+
+struct ProjectTypeEnumDescriptorJayson
+{
+  static auto deserialize(std::string_view what)
+  {
+    return project_type_from_string(what);
+  }
+
+  static auto serialize(PackageType const what)
+  {
+    return project_type_to_string(what);
+  }
+};
 
 using ProjectTypeEnumDescriptor =
-  scl::enum_field_descriptor<ProjectType,
+  scl::enum_field_descriptor<PackageType,
                              project_type_from_string,
                              project_type_to_string>;
 
@@ -54,7 +67,7 @@ struct MetaConf
 {
   // hewg version
   std::string hewg_version;
-  ProjectType type;
+  PackageType type;
 
   std::optional<std::string> profile_override;
 

@@ -10,6 +10,7 @@
 #include <set>
 
 #include "common.hh"
+#include "confs.hh"
 #include "semver.hh"
 #include "target.hh"
 
@@ -124,14 +125,16 @@ std::optional<DependencyIdentifier> parse_dependency_identifier(
 struct PackageInfo
 {
   PackageIdentifier this_identifier;
-  std::string package_type;
+  PackageType type;
 
   std::set<DependencyIdentifier> internal_dependencies;
   std::set<DependencyIdentifier> external_dependencies;
 
   using jayson_fields =
     std::tuple<jayson::obj_field<"identifier", &PackageInfo::this_identifier>,
-               jayson::obj_field<"type", &PackageInfo::package_type>,
+               jayson::enum_field<"type",
+                                  &PackageInfo::type,
+                                  ProjectTypeEnumDescriptorJayson>,
                jayson::obj_field<"internal_dependencies",
                                  &PackageInfo::internal_dependencies>,
                jayson::obj_field<"external_dependencies",
@@ -169,7 +172,14 @@ std::optional<PackageIdentifier> select_package_from_dependency_identifier(
 
 // creates and verifies the dependency tree
 // for this hewg project
-void
+
+struct DeptreeOutput
+{
+  std::set<PackageIdentifier> include_packages;
+  std::set<PackageIdentifier> link_packages;
+};
+
+DeptreeOutput
 build_dependency_tree(ConfigurationFile const& config,
                       PackageCacheDB& db,
                       TargetTriplet const& this_target);
@@ -184,6 +194,12 @@ construct_dependency_graph(std::string_view package_name,
 
 std::optional<PackageInfo>
 get_package_info(PackageIdentifier dep);
+
+std::filesystem::path
+get_packages_include_directory(PackageIdentifier const&);
+
+std::filesystem::path
+get_packages_static_library_file(PackageIdentifier const&, bool is_PIC);
 
 PackageCacheDB
 open_package_db();

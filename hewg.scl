@@ -21,16 +21,16 @@ strip = true
 
 [libraries]
 native = { 
-    "scl" 
+    # "scl" 
     "datalogpp" 
 }
 
 [depends]
 internal = {
     ">=crow.scl-0.1.0"
-    ">=crow.jayson-0.1.0"
-    ">=crow.lexible-0.1.0"
-    ">=crow.datalogpp-0.1.0"
+    # ">=crow.jayson-0.1.0"
+    # ">=crow.lexible-0.1.0"
+    # ">=crow.datalogpp-0.1.0"
 }
 
 external = { }
