@@ -1,9 +1,8 @@
-#include "common.hh"
-#include "depfile.hh"
-#include "paths.hh"
-
 #include <lexible.hh>
 #include <optional>
+
+#include "common.hh"
+#include "depfile.hh"
 
 enum class TokenType
 {
@@ -19,7 +18,8 @@ constexpr std::string_view skip_regex = R"(\s+)";
 
 // parser doesn't need to be very robust,
 // we verify the filepaths are ok afterwards
-constexpr std::string_view identifier_regex = R"(([a-zA-Z0-9_\-\.\/]|\\ )+)";
+constexpr std::string_view identifier_regex =
+  R"(([a-zA-Z0-9_\-\.\/]|\\ |:(?! ))+)";
 constexpr std::string_view colon_regex = ":";
 constexpr std::string_view backslash_regex = R"(\\)";
 
@@ -123,8 +123,8 @@ parse_depfile(std::filesystem::path const path)
   auto const out = parser(std::move(toks)).parse();
 
   if (not out)
-    throw std::runtime_error(
-      std::format("failed to parse depfile:\n{}", out.error().what()));
+    throw std::runtime_error(std::format(
+      "failed to parse depfile {}:\n{}", path.string(), out.error().what()));
 
   return *out;
 }

@@ -27,8 +27,6 @@ public:
   auto prerelease() const { return m_prerelease; }
   auto metadata() const { return m_metadata; }
 
-  // checks for an EXACT match, including prerelease
-  // and metadata information
   std::strong_ordering operator<=>(SemVer const&) const;
   bool operator==(SemVer const&) const = default;
   bool operator<(SemVer const&) const = default;

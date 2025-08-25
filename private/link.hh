@@ -9,7 +9,8 @@ void
 link_executable(ConfigurationFile const& config,
                 TargetFile const& tools,
                 BuildOptions const& options,
-                DeptreeOutput const& deptree,
+                PackageCacheDB const& db,
+                Deptree const& deptree,
                 std::span<std::filesystem::path const> object_files,
                 std::filesystem::path output_directory);
 
@@ -24,6 +25,7 @@ void
 shared_link(ConfigurationFile const& config,
             TargetFile const& tools,
             BuildOptions const& options,
-            DeptreeOutput const& deptree,
+            PackageCacheDB const& db,
+            Deptree const& deptree,
             std::span<std::filesystem::path const> object_files,
             std::filesystem::path output_directory);

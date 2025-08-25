@@ -3,13 +3,11 @@
 #include <compare>
 #include <filesystem>
 #include <jayson.hh>
-#include <list>
 #include <memory>
 #include <optional>
 #include <scl/scl.hh>
 #include <set>
 
-#include "common.hh"
 #include "confs.hh"
 #include "semver.hh"
 #include "target.hh"
@@ -98,19 +96,13 @@ public:
 };
 
 std::string_view sort_to_string(DependencyIdentifier::Sort);
+std::optional<DependencyIdentifier::Sort> sort_from_string(std::string_view);
 
 struct DependencyIdentifier::SortDescriptor
 {
   std::optional<Sort> static deserialize(std::string_view in)
   {
-    if (in == "=")
-      return DependencyIdentifier::Sort::Exact;
-
-    else if (in == ">=")
-      return DependencyIdentifier::Sort::ThisOrBetter;
-
-    else
-      return std::nullopt;
+    return sort_from_string(in);
   }
 
   std::string static serialize(Sort const in)
@@ -145,52 +137,43 @@ struct PackageInfo
 
 using PackageCacheDB = std::set<PackageIdentifier>;
 
-struct Package
-{
-  std::string name;
-  version_triplet version;
-
-  std::list<std::shared_ptr<Package>> internal_dependencies;
-};
-
-// struct ResolvedDependencies
-// {
-//   std::vector<PackageInfo> packages_to_link;
-//   std::vector<PackageInfo> packages_to_include;
-// };
-
-// std::vector<ResolvedDependencies>
-// resolve_deps(ConfigurationFile const& config);
-
 // attempts to select a semver compatable package identifier
 // from a dependency identifier and the installed pacakges
 // on the system
 // if no suitable package identifier can be selected,
 // returns nullopt
-std::optional<PackageIdentifier> select_package_from_dependency_identifier(
-  DependencyIdentifier);
-
+std::optional<PackageIdentifier>
+select_package_from_dependency_identifier(PackageCacheDB const&,
+                                          DependencyIdentifier);
 // creates and verifies the dependency tree
 // for this hewg project
 
-struct DeptreeOutput
+struct DeptreeCtx;
+struct DeptreeDeleter
 {
-  std::set<PackageIdentifier> include_packages;
-  std::set<PackageIdentifier> link_packages;
+  void operator()(DeptreeCtx*);
 };
+using Deptree = std::unique_ptr<DeptreeCtx, DeptreeDeleter>;
 
-DeptreeOutput
+Deptree
 build_dependency_tree(ConfigurationFile const& config,
-                      PackageCacheDB& db,
+                      PackageCacheDB const& db,
                       TargetTriplet const& this_target);
+
+std::set<PackageIdentifier>
+collect_packages_to_include(ConfigurationFile const& config,
+                            PackageCacheDB const& db,
+                            TargetTriplet const& this_target,
+                            Deptree const&);
+
+std::set<PackageIdentifier>
+collect_packages_to_link(ConfigurationFile const& config,
+                         PackageCacheDB const& db,
+                         TargetTriplet const& this_target,
+                         Deptree const&);
 
 std::filesystem::path
 get_package_directory(PackageIdentifier const&);
-
-// version is exact
-std::shared_ptr<Package>
-construct_dependency_graph(std::string_view package_name,
-                           version_triplet version);
 
 std::optional<PackageInfo>
 get_package_info(PackageIdentifier dep);

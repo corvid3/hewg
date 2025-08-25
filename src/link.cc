@@ -39,12 +39,17 @@ generate_link_flags(ConfigurationFile const&,
 // this requires dependency resolvement...
 static auto
 get_library_flags(ConfigurationFile const& config,
-                  DeptreeOutput const& deptree,
+                  TargetFile const& target,
+                  PackageCacheDB const& db,
+                  Deptree const& deptree,
                   bool const PIE)
 {
   std::vector<std::string> args;
 
-  for (auto const& ident : deptree.link_packages) {
+  auto const links =
+    collect_packages_to_link(config, db, target.triplet, deptree);
+
+  for (auto const& ident : links) {
     args.push_back(std::format(
       "{}",
       std::filesystem::canonical(get_packages_static_library_file(ident, PIE))
@@ -67,7 +72,8 @@ void
 link_executable(ConfigurationFile const& config,
                 TargetFile const& target,
                 BuildOptions const& options,
-                DeptreeOutput const& deptree,
+                PackageCacheDB const& db,
+                Deptree const& deptree,
                 std::span<std::filesystem::path const> object_files,
                 std::filesystem::path output_directory)
 {
@@ -80,7 +86,7 @@ link_executable(ConfigurationFile const& config,
     config, target, options.release, object_files, output_filepath);
 
   threadsafe_print("now lets get linking...\n");
-  append_vec(args, get_library_flags(config, deptree, false));
+  append_vec(args, get_library_flags(config, target, db, deptree, false));
 
   run_command(target.cxx, args);
 
@@ -117,7 +123,8 @@ void
 shared_link(ConfigurationFile const& config,
             TargetFile const& target,
             BuildOptions const& options,
-            DeptreeOutput const& deptree,
+            PackageCacheDB const& db,
+            Deptree const& deptree,
             std::span<std::filesystem::path const> object_files,
             std::filesystem::path output_directory)
 {
@@ -134,7 +141,7 @@ shared_link(ConfigurationFile const& config,
   // ignore static libraries here
   // and defer their linking by adding them to the
   // descriptor of the package file
-  append_vec(args, get_library_flags(config, deptree, true));
+  append_vec(args, get_library_flags(config, target, db, deptree, true));
 
   args.push_back("-shared");
 
