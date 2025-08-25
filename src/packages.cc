@@ -8,7 +8,7 @@
 #include <jayson.hh>
 #include <optional>
 #include <print>
-#include <scl.hh>
+#include <scl/scl.hh>
 #include <stdexcept>
 #include <string_view>
 #include <utility>

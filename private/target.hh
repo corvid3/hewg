@@ -3,8 +3,9 @@
 #include <format>
 #include <jayson.hh>
 #include <regex>
-#include <scl.hh>
 #include <string>
+
+#include <scl/scl.hh>
 
 #include "cmdline.hh"
 #include "confs.hh"

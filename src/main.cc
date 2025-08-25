@@ -7,7 +7,7 @@
 #include <jayson.hh>
 #include <optional>
 #include <ranges>
-#include <scl.hh>
+#include <scl/scl.hh>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>

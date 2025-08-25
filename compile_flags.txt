@@ -3,3 +3,4 @@
 -Wextra
 -Werror
 -Iprivate
+-I/home/korvo/.hewg/packages/crow.scl-0.1.0:x86-linux-gnu/include

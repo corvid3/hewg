@@ -1,7 +1,7 @@
 #include <filesystem>
 #include <jayson.hh>
 #include <optional>
-#include <scl.hh>
+#include <scl/scl.hh>
 
 #include "analysis.hh"
 #include "cmdline.hh"

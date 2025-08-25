@@ -6,7 +6,7 @@
 #include <list>
 #include <memory>
 #include <optional>
-#include <scl.hh>
+#include <scl/scl.hh>
 #include <set>
 
 #include "common.hh"

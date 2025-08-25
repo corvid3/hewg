@@ -3,7 +3,7 @@
 #include <fstream>
 #include <jayson.hh>
 #include <ostream>
-#include <scl.hh>
+#include <scl/scl.hh>
 #include <stdexcept>
 
 #include "analysis.hh"

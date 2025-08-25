@@ -2,9 +2,10 @@
 
 #include <jayson.hh>
 #include <optional>
-#include <scl.hh>
 #include <string>
 #include <tuple>
+
+#include <scl/scl.hh>
 
 #include "common.hh"
 
