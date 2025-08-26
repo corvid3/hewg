@@ -214,14 +214,14 @@ emit_symcache_contents(std::string_view package_name, SemVer const& version)
       std::format("char const* __hewg_prerelease_package_hewg = \"{}\";", *pre);
   else
     out += std::format(
-      "char const* __hewg_prerelease_package_hewg = (char const*)0;", *pre);
+      "char const* __hewg_prerelease_package_hewg = (char const*)0;");
 
   if (auto const meta = version.metadata())
     out +=
       std::format("char const* __hewg_metadata_package_hewg = \"{}\";", *meta);
   else
-    out += std::format(
-      "char const* __hewg_metadata_package_hewg = (char const*)0;", *meta);
+    out +=
+      std::format("char const* __hewg_metadata_package_hewg = (char const*)0;");
 
   using namespace std::chrono;
 

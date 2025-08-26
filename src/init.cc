@@ -10,17 +10,19 @@
 #include "init.hh"
 
 auto static const scl_template = R"([hewg]
-version = { %VERSION% }
-type = "%TYPE%"
+version = { %HEWG-VERSION% }
+type = "%PROJECT-TYPE%"
 
 [project]
-version = { 0 0 0 }
+org = "%ORG%"
+version = "0.0.0"
 name = "%NAME%"
 description = ""
 authors = { }
 
-[libraries]
-native = { }
+[depends]
+internal = { }
+external = { }
 
 [cxx]
 flags = { "-Wextra" "-Werror" }
