@@ -1,9 +1,9 @@
+#include <crow.jayson/jayson.hh>
+#include <crow.scl/scl.hh>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <jayson/jayson.hh>
 #include <ostream>
-#include <scl/scl.hh>
 #include <stdexcept>
 
 #include "analysis.hh"
@@ -74,7 +74,9 @@ install_headers(ConfigurationFile const& config,
                 PackageIdentifier const&,
                 std::filesystem::path const& install_dir)
 {
-  auto const include_header_dir = install_dir / "include" / config.project.name;
+  auto const include_header_dir =
+    install_dir / "include" /
+    std::format("{}.{}", config.project.org, config.project.name);
   std::filesystem::create_directories(install_dir / "include");
   std::filesystem::copy(hewg_public_header_directory_path,
                         include_header_dir,

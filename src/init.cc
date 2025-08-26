@@ -3,13 +3,11 @@
 #include <print>
 #include <regex>
 #include <string_view>
-#include <terse.hh>
 
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
 #include "init.hh"
-#include "semver.hh"
 
 auto static const scl_template = R"([hewg]
 version = { %VERSION% }

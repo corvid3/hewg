@@ -1,7 +1,7 @@
 #pragma once
 
 #include <compare>
-#include <jayson/jayson.hh>
+#include <crow.jayson/jayson.hh>
 #include <optional>
 #include <string>
 #include <string_view>

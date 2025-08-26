@@ -1,20 +1,17 @@
 #include <chrono>
 #include <cmath>
+#include <crow.jayson/jayson.hh>
+#include <crow.scl/scl.hh>
+#include <crow.terse/terse.hh>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <jayson/jayson.hh>
-#include <optional>
-#include <ranges>
-#include <scl/scl.hh>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <terse.hh>
 #include <unistd.h>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -108,6 +105,12 @@ try {
     if (options.help)
       std::cout << terse::print_usage<BuildOptions>() << std::endl,
         std::exit(0);
+
+    // install implies release
+    if (options.install == true) {
+      threadsafe_print_verbose("install implies --release");
+      options.release = true;
+    }
 
     ConfigurationFile const config = get_config_file(tl_options, config_path);
     auto const target_triplet =

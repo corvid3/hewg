@@ -1,11 +1,11 @@
 #pragma once
 
 #include <compare>
+#include <crow.jayson/jayson.hh>
+#include <crow.scl/scl.hh>
 #include <filesystem>
-#include <jayson/jayson.hh>
 #include <memory>
 #include <optional>
-#include <scl/scl.hh>
 #include <set>
 
 #include "confs.hh"
