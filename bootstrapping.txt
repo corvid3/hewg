@@ -7,7 +7,6 @@ for each dependency, that is:
 	* crow.datalogpp
 	* crow.terse
 (NOTE: all of these may be found at my github)
-
 clone their respective repositories, and then run the `bootstrap.sh` found within.
 
 once this is done, in the root directory of hewg, run 
@@ -19,7 +18,7 @@ once the bootstrapped version of hewg is installed,
 go back to the dependencies and for each run `hewg-bootstrap build --install`.
 
 once all of the dependencies are installed as packages, return to the hewg directory
-and run `hewg-bootstrap --install`.
+and run `hewg-bootstrap build --install`.
 
 if you wish to remove the bootstrapped version of hewg, run 
 	`make uninstall`,
