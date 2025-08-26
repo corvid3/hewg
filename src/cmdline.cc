@@ -1,4 +1,4 @@
-#include <terse.hh>
+#include <terse/terse.hh>
 
 #include "cmdline.hh"
 

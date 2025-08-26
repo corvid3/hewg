@@ -1,7 +1,7 @@
 #pragma once
 
 #include <format>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <regex>
 #include <string>
 

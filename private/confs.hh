@@ -1,6 +1,6 @@
 #pragma once
 
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <optional>
 #include <string>
 #include <tuple>

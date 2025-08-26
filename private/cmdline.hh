@@ -1,7 +1,7 @@
 #pragma once
 
 #include <optional>
-#include <terse.hh>
+#include <terse/terse.hh>
 #include <thread>
 
 struct CleanOptions : terse::TerminalSubcommand

@@ -28,9 +28,10 @@ native = {
 [depends]
 internal = {
     "=crow.scl-0.1.0"
-    # ">=crow.jayson-0.1.0"
-    # ">=crow.lexible-0.1.0"
+    "=crow.jayson-0.1.0"
+    "=crow.lexible-0.1.0"
     "=crow.datalogpp-0.0.1"
+    "=crow.terse-0.1.0"
 }
 
 external = { }

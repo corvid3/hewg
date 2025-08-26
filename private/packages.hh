@@ -2,7 +2,7 @@
 
 #include <compare>
 #include <filesystem>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <memory>
 #include <optional>
 #include <scl/scl.hh>

@@ -5,7 +5,7 @@
 #include <format>
 #include <future>
 #include <iterator>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <memory>
 #include <optional>
 #include <span>

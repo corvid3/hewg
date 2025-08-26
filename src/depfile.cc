@@ -1,4 +1,4 @@
-#include <lexible.hh>
+#include <lexible/lexible.hh>
 #include <optional>
 
 #include "common.hh"

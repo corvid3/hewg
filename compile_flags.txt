@@ -5,3 +5,6 @@
 -Iprivate
 -I/home/korvo/.hewg/packages/crow.scl-0.1.0:x86-linux-gnu/include
 -I/home/korvo/.hewg/packages/crow.datalogpp-0.0.1:x86-linux-gnu/include
+-I/home/korvo/.hewg/packages/crow.jayson-0.1.0:x86-linux-gnu/include
+-I/home/korvo/.hewg/packages/crow.lexible-0.1.0:x86-linux-gnu/include
+-I/home/korvo/.hewg/packages/crow.terse-0.1.0:x86-linux-gnu/include

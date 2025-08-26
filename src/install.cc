@@ -1,7 +1,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <ostream>
 #include <scl/scl.hh>
 #include <stdexcept>

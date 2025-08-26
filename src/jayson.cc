@@ -1,2 +1,2 @@
 #define JAYSON_IMPL
-#include <jayson.hh>
+#include <jayson/jayson.hh>

@@ -1,12 +1,13 @@
-#include "confs.hh"
-#include "hooks.hh"
-#include "paths.hh"
-#include "thread_pool.hh"
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
+
+#include "confs.hh"
+#include "hooks.hh"
+#include "paths.hh"
+#include "thread_pool.hh"
 
 struct HookCache
 {

@@ -4,7 +4,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <optional>
 #include <ranges>
 #include <scl/scl.hh>

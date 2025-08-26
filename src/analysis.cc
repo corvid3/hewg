@@ -2,7 +2,7 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
-#include <jayson.hh>
+#include <jayson/jayson.hh>
 #include <optional>
 #include <stdexcept>
 #include <sys/stat.h>
