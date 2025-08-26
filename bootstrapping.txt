@@ -23,3 +23,5 @@ and run `hewg-bootstrap build --install`.
 if you wish to remove the bootstrapped version of hewg, run 
 	`make uninstall`,
 it will prompt you if you wish to remove the file and ask for a sudo password.
+
+one may also wish to add `~/.hewg/bin` to their path, if they wish to do so.
