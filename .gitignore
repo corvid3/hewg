@@ -13,3 +13,4 @@ test/testProject
 test/.hcache
 .hcache
 target
+tmp-include-dir

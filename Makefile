@@ -1,45 +1,5 @@
-ifndef BUILD_LINUX
-ifndef BUILD_WINDOWS
-$(error BUILD_LINUX or BUILD_WINDOWS must be set!)
-endif
-endif
-
-ifdef BUILD_LINUX
-ifdef BUILD_WINDOWS
-$(error BUILD_LINUX and BUILD_WINDOWS may not be set at the same time!)
-endif
-endif
-
-ifdef BUILD_LINUX
-	SRC += 
-	CSRC += 
-
-	BINNAME = hewg.out
-	INSTALL_NAME = hewg
-
-	LDLIBS += 
-endif
-
-ifdef BUILD_WINDOWS
-	CXX = x86_64-w64-mingw32-g++
-	CC = x86_64-w64-mingw32-gcc
-
-	SRC += 
-	CSRC += 
-
-	BINNAME = hewg.exe
-	INSTALL_NAME = $(BINNAME)
-
-	# because of mingw32 & linux crossdev,
-	# have to statically link the C++ runtime
-	LDFLAGS += -static-libgcc -static-libstdc++ -static
-	LDLIBS  += 
-	LDFLAGS += 
-endif
-
-
-CXXFLAGS=-MMD @compile_flags.txt -std=c++23
-CFLAGS=-MMD @ccompile_flags.txt 
+CXXFLAGS=-I./tmp-include-dir/include -Iinclude -Iprivate -MMD -std=c++23
+CFLAGS=-I./tmp-include-dir/include -Iinclude -Iprivate -MMD 
 
 ifdef RELEASE
 CXXFLAGS+=-O2 -g
@@ -73,7 +33,18 @@ CSRCS=csrc/bootstrap_version.c
 OBJS=$(SRCS:.cc=.o)
 COBJS=$(CSRCS:.c=.o)
 
-default: hewg
+init-bootstrap:
+	mkdir -p tmp-include-dir/include/
+	mkdir -p tmp-include-dir/include/crow.scl
+	mkdir -p tmp-include-dir/include/crow.jayson
+	mkdir -p tmp-include-dir/include/crow.lexible
+	mkdir -p tmp-include-dir/include/crow.datalogpp
+	mkdir -p tmp-include-dir/include/crow.terse
+	cp /usr/local/include/scl.hh tmp-include-dir/include/crow.scl
+	cp /usr/local/include/jayson.hh tmp-include-dir/include/crow.jayson
+	cp /usr/local/include/lexible.hh tmp-include-dir/include/crow.lexible
+	cp /usr/local/include/datalogpp.hh tmp-include-dir/include/crow.datalogpp
+	cp /usr/local/include/terse.hh tmp-include-dir/include/crow.terse
 
 clean:
 	rm $(OBJS) 
@@ -84,8 +55,12 @@ clean:
 %.o: %.c
 	$(CC) $(CFLAGS) $^ -c -o $@
 
-hewg: $(OBJS) $(COBJS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o bin/$(BINNAME)
+bootstrap: $(OBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o bin/hewg
 
 install:
-	cp bin/$(BINNAME) /usr/local/bin/$(INSTALL_NAME)
+	sudo cp bin/hewg /usr/local/bin/hewg-bootstrap
+
+uninstall:
+	sudo rm -i /usr/local/bin/hewg-bootstrap
+
