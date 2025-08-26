@@ -30,7 +30,7 @@ extern "C" char const* __hewg_prerelease_package_hewg;
 extern "C" char const* __hewg_metadata_package_hewg;
 extern "C" long __hewg_build_date_package_hewg;
 
-SemVer const inline this_hewg_version{ 0, 4, 0, std::nullopt, std::nullopt };
+SemVer const inline this_hewg_version{ 0, 4, 0, "alpha.nd", std::nullopt };
 
 template<typename T>
 class atomic_vec
