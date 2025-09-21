@@ -118,8 +118,8 @@ SemVer::operator<=>(SemVer const& rhs) const
                  ? std::strong_ordering::less
                  : std::strong_ordering::greater;
 
-      for (auto const i : std::ranges::iota_view(
-             std::min(lhs_segments.size(), rhs_segments.size()))) {
+      for (auto const i : std::ranges::iota_view<int, int>(
+             0, std::min(lhs_segments.size(), rhs_segments.size()))) {
         auto const lhs_segment = lhs_segments[i];
         auto const rhs_segment = rhs_segments[i];
 
@@ -130,7 +130,8 @@ SemVer::operator<=>(SemVer const& rhs) const
       }
 
     } else {
-      for (auto const i : std::ranges::iota_view(lhs_segments.size())) {
+      for (auto const i :
+           std::ranges::iota_view<int, int>(0, lhs_segments.size())) {
         auto const lhs_segment = lhs_segments[i];
         auto const rhs_segment = rhs_segments[i];
 

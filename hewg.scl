@@ -1,5 +1,5 @@
 [hewg]
-version = "0.4.0"
+version = "0.4.0-alpha"
 type = "executable"
 
 [project]
@@ -20,6 +20,9 @@ internal = {
 
 external = { }
 
+[libraries]
+native = { "stdc++exp" }
+
 [cxx]
 flags = { "-Wextra" "-Werror" }
 std = 23
@@ -39,9 +42,11 @@ sources =
     "build.cc"
     "init.cc"
     "hooks.cc"
+    "srcrelatives.cc"
 
     "packages.cc"
     "install.cc"
+    "deptree.cc"
 
     "analysis.cc"
     "depfile.cc"

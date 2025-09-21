@@ -78,6 +78,28 @@ struct BuildOptions : terse::TerminalSubcommand
                   &BuildOptions::target>>;
 };
 
+struct TestAllOptions : terse::NonterminalSubcommand
+{
+  constexpr static auto name = "all";
+  constexpr static auto usage = "hewg test all";
+  constexpr static auto short_description = "run all tests";
+  constexpr static auto description = short_description;
+
+  using options = std::tuple<>;
+};
+
+struct TestOptions : terse::TerminalSubcommand
+{
+  constexpr static auto name = "test";
+  constexpr static auto usage = "hewg test all";
+  constexpr static auto short_description =
+    "subcommand to interface the test suite";
+  constexpr static auto description = short_description;
+
+  using options = std::tuple<>;
+  using subcommands = std::tuple<>;
+};
+
 struct ToplevelOptions : terse::NonterminalSubcommand
 {
   bool force = false;
@@ -124,7 +146,8 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   "prints the version of hewg",
                   &ToplevelOptions::print_version>>;
 
-  using subcommands = std::tuple<BuildOptions, CleanOptions, InitOptions>;
+  using subcommands =
+    std::tuple<BuildOptions, CleanOptions, InitOptions, TestOptions>;
 };
 
 decltype(terse::execute<ToplevelOptions>({}, {}))

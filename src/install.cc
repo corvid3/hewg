@@ -70,14 +70,16 @@ install_executable(ConfigurationFile const& config,
 }
 
 static void
-install_headers(ConfigurationFile const& config,
-                PackageIdentifier const&,
+install_headers(ConfigurationFile const&,
+                PackageIdentifier const& this_package_ident,
                 std::filesystem::path const& install_dir)
 {
   auto const include_header_dir =
     install_dir / "include" /
-    std::format("{}.{}", config.project.org, config.project.name);
+    std::format("{}.{}", this_package_ident.org(), this_package_ident.name());
+
   std::filesystem::create_directories(install_dir / "include");
+
   std::filesystem::copy(hewg_public_header_directory_path,
                         include_header_dir,
                         std::filesystem::copy_options::recursive |
@@ -106,19 +108,14 @@ install_library(ConfigurationFile const& config,
                         std::filesystem::copy_options::update_existing);
 }
 
-/*
-
-~/.hewg/packages
-  * package directory
-
-~/.hewg/packages/org:some-package:version:target
-  * "hash" of a package, installed files and readmes are in here
-  * binaries are also in here, and are symlinked from
-
-~/.hewg/bin/
-  * symlink directory for binaries, so they may appear in the path
-
-*/
+// static void
+// install_shared(ConfigurationFile const& config,
+//                PackageIdentifier const& this_package_ident,
+//                std::filesystem::path const& install_dir)
+// {
+//   install_headers(config, this_package_ident, install_dir);
+//   auto const dynlib_filename =
+// }
 
 void
 install(ConfigurationFile const& config,

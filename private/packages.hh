@@ -4,8 +4,8 @@
 #include <crow.jayson/jayson.hh>
 #include <crow.scl/scl.hh>
 #include <filesystem>
-#include <memory>
 #include <optional>
+#include <regex>
 #include <set>
 
 #include "confs.hh"
@@ -14,8 +14,8 @@
 
 namespace regexes {
 
-std::regex inline const org("^[a-zA-Z]+$");
-std::regex inline const name("^[a-zA-Z0-9]+$");
+std::regex inline const org("^[a-zA-Z0-9_]+$");
+std::regex inline const name("^[a-zA-Z0-9_]+$");
 std::regex inline const semver(
   R"(^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$)");
 std::regex inline const target(
@@ -122,6 +122,8 @@ struct PackageInfo
   std::set<DependencyIdentifier> internal_dependencies;
   std::set<DependencyIdentifier> external_dependencies;
 
+  static bool constexpr jayson_explicitly_constructible = true;
+
   using jayson_fields =
     std::tuple<jayson::obj_field<"identifier", &PackageInfo::this_identifier>,
                jayson::enum_field<"type",
@@ -131,8 +133,6 @@ struct PackageInfo
                                  &PackageInfo::internal_dependencies>,
                jayson::obj_field<"external_dependencies",
                                  &PackageInfo::external_dependencies>>;
-
-  static bool constexpr jayson_explicitly_constructible = true;
 };
 
 using PackageCacheDB = std::set<PackageIdentifier>;
@@ -145,33 +145,6 @@ using PackageCacheDB = std::set<PackageIdentifier>;
 std::optional<PackageIdentifier>
 select_package_from_dependency_identifier(PackageCacheDB const&,
                                           DependencyIdentifier);
-// creates and verifies the dependency tree
-// for this hewg project
-
-struct DeptreeCtx;
-struct DeptreeDeleter
-{
-  void operator()(DeptreeCtx*);
-};
-using Deptree = std::unique_ptr<DeptreeCtx, DeptreeDeleter>;
-
-Deptree
-build_dependency_tree(ConfigurationFile const& config,
-                      PackageCacheDB const& db,
-                      TargetTriplet const& this_target);
-
-std::set<PackageIdentifier>
-collect_packages_to_include(ConfigurationFile const& config,
-                            PackageCacheDB const& db,
-                            TargetTriplet const& this_target,
-                            Deptree const&);
-
-std::set<PackageIdentifier>
-collect_packages_to_link(ConfigurationFile const& config,
-                         PackageCacheDB const& db,
-                         TargetTriplet const& this_target,
-                         Deptree const&);
-
 std::filesystem::path
 get_package_directory(PackageIdentifier const&);
 

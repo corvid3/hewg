@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <vector>
+
 struct Depfile
 {
   std::filesystem::path obj_path;

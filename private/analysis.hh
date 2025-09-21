@@ -5,11 +5,14 @@
 */
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
 
+#include "common.hh"
 #include "packages.hh"
+#include "srcrelatives.hh"
 #include "target.hh"
 
 enum class FileType
@@ -53,18 +56,25 @@ get_cache_folder(std::string_view target_name, bool release, bool pic);
 
 std::filesystem::path
 object_file_for_cxx(std::filesystem::path cache_folder,
-                    std::filesystem::path in);
+                    std::filesystem::path src_folder,
+                    std::filesystem::path abs_src_file);
 
 std::filesystem::path
-object_file_for_c(std::filesystem::path cache_folder, std::filesystem::path in);
+object_file_for_c(std::filesystem::path cache_folder,
+                  std::filesystem::path src_folder,
+                  std::filesystem::path abs_src_file);
 
 // converts a source-path source file
 // to it's cache-path dependency file
 std::filesystem::path
-depfile_for_cxx(std::filesystem::path cache_folder, std::filesystem::path in);
+depfile_for_cxx(std::filesystem::path cache_folder,
+                std::filesystem::path src_folder,
+                std::filesystem::path abs_src_file);
 
 std::filesystem::path
-depfile_for_c(std::filesystem::path cache_folder, std::filesystem::path in);
+depfile_for_c(std::filesystem::path cache_folder,
+              std::filesystem::path src_folder,
+              std::filesystem::path abs_src_file);
 
 // converts the list of source files in the config
 // into a list of files for each filetype
@@ -79,10 +89,8 @@ get_modification_date_of_file(std::filesystem::path const p);
 // returns a sublist of the provided files
 // that should be rebuilt, based on
 // modification date and include dependencies
-std::vector<std::filesystem::path>
-mark_c_files_for_rebuild(std::filesystem::path cache_folder,
-                         std::span<std::filesystem::path const> sources);
+std::vector<std::reference_wrapper<CSourceRelatives::File const>>
+mark_c_files_for_rebuild(CSourceRelatives const&);
 
-std::vector<std::filesystem::path>
-mark_cxx_files_for_rebuild(std::filesystem::path cache_folder,
-                           std::span<std::filesystem::path const> sources);
+std::vector<std::reference_wrapper<CXXSourceRelatives::File const>>
+mark_cxx_files_for_rebuild(CXXSourceRelatives const&);

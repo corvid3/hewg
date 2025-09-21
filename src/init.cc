@@ -8,16 +8,17 @@
 #include "common.hh"
 #include "confs.hh"
 #include "init.hh"
+#include "packages.hh"
 
 auto static const scl_template = R"([hewg]
-version = { %HEWG-VERSION% }
+version = "%HEWG-VERSION%"
 type = "%PROJECT-TYPE%"
 
 [project]
-org = "%ORG%"
 version = "0.0.0"
+org = "%ORG%"
 name = "%NAME%"
-description = ""
+description = "PUT YOUR DESCRIPTION HERE!"
 authors = { }
 
 [depends]
@@ -25,27 +26,23 @@ internal = { }
 external = { }
 
 [cxx]
-flags = { "-Wextra" "-Werror" }
+flags = { "-Wall" "-Wextra" "-Werror" }
 std = 23
-sources = 
-{
-  "%DEFAULTFILE%"  
-}
+sources = { }
 
 [c]
-flags = { "-Wextra" "-Werror" }
+flags = { "-Wall" "-Wextra" "-Werror" }
 std = 17
 sources = { }
 
 [hooks.prebuild]
 [hooks.postbuild]
-
 )";
 
-std::regex static const version_regex("%VERSION%");
+std::regex static const hewg_version_regex("%HEWG-VERSION%");
+std::regex static const project_type_regex("%PROJECT-TYPE%");
+std::regex static const org_regex("%ORG%");
 std::regex static const name_regex("%NAME%");
-std::regex static const type_regex("%TYPE%");
-std::regex static const defaultfile_regex("%DEFAULTFILE%");
 
 static void
 common_init(std::filesystem::path install_directory)
@@ -60,66 +57,18 @@ common_init(std::filesystem::path install_directory)
 }
 
 static std::string
-create_scl_file(std::string name,
-                std::string type,
-                std::string default_filename)
+create_scl_file(std::string_view org,
+                std::string_view name,
+                std::string_view type)
 {
   // wow the stdlib regex blows
   auto&& a = std::regex_replace(
-    scl_template, version_regex, std::format("\"{}\"", this_hewg_version));
-  auto&& b = std::regex_replace(a, name_regex, name);
-  auto&& c = std::regex_replace(b, type_regex, type);
-  auto&& d = std::regex_replace(c, defaultfile_regex, default_filename);
+    scl_template, hewg_version_regex, std::format("\"{}\"", this_hewg_version));
+  auto&& b = std::regex_replace(a, org_regex, std::string(org));
+  auto&& c = std::regex_replace(b, name_regex, std::string(name));
+  auto&& d = std::regex_replace(c, project_type_regex, std::string(type));
 
   return d;
-}
-
-static void
-init_executable(std::filesystem::path install_directory,
-                std::string_view project_name)
-{
-  auto const file =
-    create_scl_file(std::string(project_name), "executable", "main.cc");
-
-  auto const static main_filedata = R"(#include<iostream>
-
-int main() {
-  std::cout << "hello, world!\n";  
-}
-)";
-
-  std::ofstream(install_directory / "hewg.scl") << file;
-  std::ofstream(install_directory / "src" / "main.cc") << main_filedata;
-}
-
-static void
-init_library(std::filesystem::path install_directory,
-             std::string_view project_name)
-{
-  auto const file = create_scl_file(std::string(project_name), "library", "");
-
-  std::ofstream(install_directory / "hewg.scl") << file;
-}
-
-static void
-init_shared(std::filesystem::path install_directory,
-            std::string_view project_name)
-{
-  auto const file = create_scl_file(std::string(project_name), "dynlib", "");
-
-  std::ofstream(install_directory / "hewg.scl") << file;
-}
-
-static void
-init_headers(std::filesystem::path install_directory,
-             std::string_view project_name)
-{
-  auto const file = create_scl_file(std::string(project_name), "headers", "");
-
-  std::ofstream(install_directory / "hewg.scl") << file;
-  std::ofstream(install_directory / "include" /
-                std::format("{}.hh", project_name))
-    << "";
 }
 
 static void
@@ -152,11 +101,21 @@ init(InitOptions const& options, std::span<std::string const> bares)
                              "followed by the project name.");
 
   auto const project_type = project_type_from_string(bares[0]);
-  auto const project_name = bares[1];
+  auto const project_ident = bares[1];
 
-  if (not check_valid_project_identifier(project_name))
-    throw std::runtime_error("provided project name is not valid, it must fall "
-                             "within the regex range [a-zA-Z0-9_]+");
+  auto const project_org = project_ident.substr(0, project_ident.find('.'));
+  auto const project_name = project_ident.substr(project_ident.find('.') + 1);
+
+  if (project_org.empty() or project_name.empty())
+    throw std::runtime_error("project identifier shall be {ORG}.{NAME}");
+
+  if (not std::regex_match(
+        project_org.begin(), project_org.end(), regexes::org))
+    throw std::runtime_error("project org provided is not valid");
+
+  if (not std::regex_match(
+        project_name.begin(), project_name.end(), regexes::name))
+    throw std::runtime_error("project name provided is not valid");
 
   if (not project_type)
     throw std::runtime_error(
@@ -176,21 +135,28 @@ init(InitOptions const& options, std::span<std::string const> bares)
   common_init(install_directory);
 
   switch (*project_type) {
-    case PackageType::Executable:
-      init_executable(install_directory, project_name);
-      break;
+    case PackageType::Executable: {
+      auto const file =
+        create_scl_file(std::string(project_name), "executable", "");
+      std::ofstream(install_directory / "hewg.scl") << file;
+    } break;
 
-    case PackageType::StaticLibrary:
-      init_library(install_directory, project_name);
-      init_library(install_directory, project_name);
-      break;
+    case PackageType::StaticLibrary: {
+      auto const file =
+        create_scl_file(std::string(project_name), "library", "");
+      std::ofstream(install_directory / "hewg.scl") << file;
+    } break;
 
-    case PackageType::SharedLibrary:
-      init_shared(install_directory, project_name);
-      break;
+    case PackageType::SharedLibrary: {
+      auto const file =
+        create_scl_file(std::string(project_name), "dynlib", "");
+      std::ofstream(install_directory / "hewg.scl") << file;
+    } break;
 
-    case PackageType::Headers:
-      init_headers(install_directory, project_name);
-      break;
+    case PackageType::Headers: {
+      auto const file =
+        create_scl_file(std::string(project_name), "headers", "");
+      std::ofstream(install_directory / "hewg.scl") << file;
+    } break;
   }
 }

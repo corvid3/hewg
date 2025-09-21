@@ -3,7 +3,6 @@
 #include <crow.jayson/jayson.hh>
 #include <crow.scl/scl.hh>
 #include <format>
-#include <regex>
 #include <string>
 
 #include "cmdline.hh"

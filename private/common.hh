@@ -118,6 +118,25 @@ operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
   return out;
 }
 
+class stacktrace_exception : public std::exception
+{
+public:
+  stacktrace_exception(std::string_view what);
+
+  virtual char const* what() const noexcept override;
+
+private:
+  std::string m_what;
+  mutable std::string m_fmtBuf;
+};
+
+void
+assert_is_absolute(std::filesystem::path const&);
+
+void
+assert_is_subpathed(std::filesystem::path const& parent,
+                    std::filesystem::path const& child);
+
 inline std::mutex stdout_mutex;
 
 // full saturation

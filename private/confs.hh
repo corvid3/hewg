@@ -6,32 +6,6 @@
 #include <string>
 #include <tuple>
 
-#include "common.hh"
-
-inline bool
-operator==(version_triplet const l, version_triplet const r)
-{
-  auto const [lx, ly, lz] = l;
-  auto const [rx, ry, rz] = r;
-
-  return lx == rx and ly == ry and lz == rz;
-}
-
-inline bool
-operator<(version_triplet const l, version_triplet const r)
-{
-  auto const [lx, ly, lz] = l;
-  auto const [rx, ry, rz] = r;
-
-  return lx < rx and ly < ry and lz < rz;
-}
-
-std::string inline version_triplet_to_string(version_triplet const t)
-{
-  auto const [x, y, z] = t;
-  return std::format("{}.{}.{}", x, y, z);
-}
-
 enum class PackageType
 {
   Executable,

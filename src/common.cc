@@ -5,6 +5,7 @@
 #include <cmath>
 #include <compare>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -12,6 +13,7 @@
 #include <print>
 #include <pwd.h>
 #include <regex>
+#include <stacktrace>
 #include <thread>
 #include <unistd.h>
 
@@ -198,3 +200,36 @@ hsv_to_rgb(float degrees)
 //   //                    (unsigned char)g,
 //   //                    (unsigned char)b);
 // }
+stacktrace_exception::stacktrace_exception(std::string_view what)
+  : m_what(what) {};
+
+char const*
+stacktrace_exception::what() const noexcept
+{
+  std::stringstream ss;
+
+  auto st = std::stacktrace::current();
+  ss << st << std::endl << m_what << std::endl;
+
+  m_fmtBuf = std::move(ss).str();
+
+  return m_fmtBuf.c_str();
+}
+
+void
+assert_is_absolute(std::filesystem::path const& path)
+{
+  if (not path.is_absolute())
+    throw stacktrace_exception("path provided is not absolute");
+}
+
+void
+assert_is_subpathed(std::filesystem::path const& parent,
+                    std::filesystem::path const& child)
+{
+  if (not is_subpathed_by(parent, child))
+    throw stacktrace_exception(
+      std::format("provided directory {} is not a child of {}",
+                  child.string(),
+                  parent.string()));
+}

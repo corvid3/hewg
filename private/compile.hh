@@ -4,7 +4,9 @@
 #include <filesystem>
 #include <future>
 
+#include "common.hh"
 #include "confs.hh"
+#include "packages.hh"
 #include "target.hh"
 #include "thread_pool.hh"
 
@@ -14,27 +16,27 @@
   then a final link step
 */
 
-// returns all of the object files compiled
-// handles incremental compilation
-// common flags should be a set of flags
-// passed to
-
-std::pair<std::vector<std::filesystem::path>,
-          std::vector<std::future<std::optional<std::string>>>>
+/* returns a list of handles to threads created,
+ * caller must await these threads
+ */
+std::vector<std::future<std::optional<std::string>>>
 compile_cxx(ThreadPool& pool,
-            ConfigurationFile const& config,
+            int const std,
+            std::span<std::string const> extra_flags,
+            CXXSourceRelatives const& source_relatives,
             TargetFile const& tools,
-            std::filesystem::path const& cache_folder,
+            PackageIdentifier const& this_package_ident,
             std::span<std::filesystem::path const> include_directories,
             bool const release,
             bool const PIC);
 
-std::pair<std::vector<std::filesystem::path>,
-          std::vector<std::future<std::optional<std::string>>>>
+std::vector<std::future<std::optional<std::string>>>
 compile_c(ThreadPool& pool,
-          ConfigurationFile const& config,
+          int const std,
+          std::span<std::string const> extra_flags,
+          CSourceRelatives const& source_relatives,
           TargetFile const& tools,
-          std::filesystem::path const& cache_folder,
+          PackageIdentifier const& this_package_ident,
           std::span<std::filesystem::path const> include_directories,
           bool const release,
           bool const PIC);
@@ -44,4 +46,5 @@ compile_c(ThreadPool& pool,
 std::filesystem::path
 compile_hewgsym(ConfigurationFile const& config,
                 TargetFile const& tools,
+                PackageIdentifier const& this_package_ident,
                 bool PIC);

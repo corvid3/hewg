@@ -3,6 +3,7 @@
 #include <crow.jayson/jayson.hh>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <sys/stat.h>
@@ -145,7 +146,7 @@ static_library_name_for_project(ConfigurationFile const& config, bool const PIE)
 std::string
 dynamic_library_name_for_project(ConfigurationFile const& config)
 {
-  return std::format("lib{}.so", config.project.name);
+  return std::format("lib{}.{}.so", config.project.org, config.project.name);
 }
 
 std::filesystem::path
@@ -180,67 +181,58 @@ get_cache_folder(std::string_view target_name, bool release, bool pic)
 
 std::filesystem::path
 object_file_for_cxx(std::filesystem::path cache_folder,
-                    std::filesystem::path in)
+                    std::filesystem::path src_folder,
+                    std::filesystem::path abs_src_file)
 {
-  if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
-    throw std::runtime_error(
-      std::format("object_file_for given a path that is not "
-                  "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_cxx_src_directory_path.string(),
-                  in.string()));
+  assert_is_absolute(abs_src_file);
+  assert_is_subpathed(src_folder, abs_src_file);
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_cxx_src_directory_path);
+    std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "cxx_objects" / relative_to_src)
     .replace_extension(".o");
 }
 
 std::filesystem::path
-object_file_for_c(std::filesystem::path cache_folder, std::filesystem::path in)
+object_file_for_c(std::filesystem::path cache_folder,
+                  std::filesystem::path src_folder,
+                  std::filesystem::path abs_src_file)
 {
-  if (not is_subpathed_by(hewg_c_src_directory_path, in))
-    throw std::runtime_error(
-      std::format("object_file_for given a path that is not "
-                  "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_c_src_directory_path.string(),
-                  in.string()));
+  assert_is_absolute(abs_src_file);
+  assert_is_subpathed(src_folder, abs_src_file);
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_c_src_directory_path);
+    std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "c_objects" / relative_to_src).replace_extension(".o");
 }
 
 std::filesystem::path
-depfile_for_cxx(std::filesystem::path cache_folder, std::filesystem::path in)
+depfile_for_cxx(std::filesystem::path cache_folder,
+                std::filesystem::path src_folder,
+                std::filesystem::path abs_src_file)
 {
-  if (not is_subpathed_by(hewg_cxx_src_directory_path, in))
-    throw std::runtime_error(
-      std::format("depfile_for given a path that is not "
-                  "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_cxx_src_directory_path.string(),
-                  in.string()));
+  assert_is_absolute(abs_src_file);
+  assert_is_subpathed(src_folder, abs_src_file);
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_cxx_src_directory_path);
+    std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "cxx_depends" / relative_to_src)
     .replace_extension(".d");
 }
 
 std::filesystem::path
-depfile_for_c(std::filesystem::path cache_folder, std::filesystem::path in)
+depfile_for_c(std::filesystem::path cache_folder,
+              std::filesystem::path src_folder,
+              std::filesystem::path abs_src_file)
 {
-  if (not is_subpathed_by(hewg_c_src_directory_path, in))
-    throw std::runtime_error(
-      std::format("depfile_for given a path that is not "
-                  "subpathed by the src directory, owner = <{}>, child = <{}>",
-                  hewg_c_src_directory_path.string(),
-                  in.string()));
+  assert_is_absolute(abs_src_file);
+  assert_is_subpathed(src_folder, abs_src_file);
 
   auto const relative_to_src =
-    std::filesystem::relative(in, hewg_c_src_directory_path);
+    std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "c_depends" / relative_to_src).replace_extension(".d");
 }
@@ -286,77 +278,32 @@ get_modification_date_of_file(std::filesystem::path const p)
     .count();
 }
 
-std::vector<Depfile> static get_dependencies_for_c(
-  std::filesystem::path const cache_folder,
-  std::span<std::filesystem::path const> source_files)
+std::vector<std::reference_wrapper<CSourceRelatives::File const>>
+mark_c_files_for_rebuild(CSourceRelatives const& src)
 {
-  std::vector<Depfile> files;
+  std::vector<std::reference_wrapper<CSourceRelatives::File const>> rebuilds;
 
-  for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_c(cache_folder, source_file);
+  for (auto const& file : src.files()) {
+    /* files for which their depfile or object file does not exist
+     * must be rebuilt
+     */
+    if (not std::filesystem::exists(src.cache_directory() / file.depends) or
+        not std::filesystem::exists(src.cache_directory() / file.object))
+      rebuilds.push_back(file);
 
-    if (not std::filesystem::exists(depfile_path))
-      continue;
+    auto const obj_md = *get_modification_date_of_file(file.object);
+    auto const depfile = parse_depfile(file.depends);
 
-    files.push_back(parse_depfile(depfile_path));
-  }
-
-  return files;
-};
-
-std::vector<Depfile> static get_dependencies_for_cxx(
-  std::filesystem::path const cache_folder,
-  std::span<std::filesystem::path const> source_files)
-{
-  std::vector<Depfile> files;
-
-  for (auto const& source_file : source_files) {
-    auto const depfile_path = depfile_for_cxx(cache_folder, source_file);
-
-    if (not std::filesystem::exists(depfile_path))
-      continue;
-
-    files.push_back(parse_depfile(depfile_path));
-  }
-
-  return files;
-};
-
-static std::vector<std::filesystem::path>
-mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
-                             std::span<Depfile const> depfiles)
-{
-  std::vector<std::filesystem::path> rebuilds;
-
-  // lazily find
-  // those files which don't have a depfile (thus uncompiled)
-  // yes this sucks. i fix it later
-  for (auto const& file : sources) {
-    for (auto const& df : depfiles)
-      if (std::filesystem::absolute(file) ==
-          std::filesystem::absolute(df.src_path))
-        goto after;
-
-    rebuilds.push_back(file);
-  after:;
-  }
-
-  for (auto const& depfile : depfiles) {
-    auto const obj_md = get_modification_date_of_file(depfile.obj_path);
-
-    if (not obj_md) {
-      rebuilds.push_back(depfile.src_path);
-      continue;
-    }
-
+    /* go through all files that which this source file
+     * depends upon, and if any of them are newer than the
+     * compiled object file, we must rebuild
+     */
     for (auto const& dep : depfile.dependencies) {
       auto const dep_md = get_modification_date_of_file(dep);
-
       if (not dep_md)
         continue;
-
       if (*dep_md > obj_md) {
-        rebuilds.push_back(depfile.src_path);
+        rebuilds.push_back(file);
         break;
       }
     }
@@ -365,54 +312,36 @@ mark_c_cxx_files_for_rebuild(std::span<std::filesystem::path const> sources,
   return rebuilds;
 }
 
-std::vector<std::filesystem::path>
-mark_c_files_for_rebuild(std::filesystem::path const cache_folder,
-                         std::span<std::filesystem::path const> sources)
+std::vector<std::reference_wrapper<CXXSourceRelatives::File const>>
+mark_cxx_files_for_rebuild(CXXSourceRelatives const& src)
 {
-  std::vector<Depfile> const depfiles =
-    get_dependencies_for_c(cache_folder, sources);
-  return mark_c_cxx_files_for_rebuild(sources, depfiles);
-}
+  std::vector<std::reference_wrapper<CXXSourceRelatives::File const>> rebuilds;
 
-std::vector<std::filesystem::path>
-mark_cxx_files_for_rebuild(std::filesystem::path const cache_folder,
-                           std::span<std::filesystem::path const> sources)
-{
-  std::vector<Depfile> const depfiles =
-    get_dependencies_for_cxx(cache_folder, sources);
-  return mark_c_cxx_files_for_rebuild(sources, depfiles);
-}
+  for (auto const& file : src.files()) {
+    /* files for which their depfile or object file does not exist
+     * must be rebuilt
+     */
+    if (not std::filesystem::exists(src.cache_directory() / file.depends) or
+        not std::filesystem::exists(src.cache_directory() / file.object))
+      rebuilds.push_back(file);
 
-std::optional<version_triplet>
-select_best_compatable_semver(std::span<version_triplet const> list_,
-                              version_triplet const requested)
-{
-  std::vector<version_triplet> list(list_.begin(), list_.end());
+    auto const obj_md = *get_modification_date_of_file(file.object);
+    auto const depfile = parse_depfile(file.depends);
 
-  auto const [rx, ry, rz] = requested;
+    /* go through all files that which this source file
+     * depends upon, and if any of them are newer than the
+     * compiled object file, we must rebuild
+     */
+    for (auto const& dep : depfile.dependencies) {
+      auto const dep_md = get_modification_date_of_file(dep);
+      if (not dep_md)
+        continue;
+      if (*dep_md > obj_md) {
+        rebuilds.push_back(file);
+        break;
+      }
+    }
+  }
 
-  // requested major version must be
-  // exactly equal to the provided minor version
-  std::erase_if(list, [=](version_triplet const in) {
-    auto const [x, _y, _z] = in;
-    return x != rx;
-  });
-
-  if (list.empty())
-    return std::nullopt;
-
-  // requested minor version must be less than or equal to
-  // the provided minor version
-  std::erase_if(list, [=](version_triplet const in) {
-    auto const [_x, y, _z] = in;
-    return y < ry;
-  });
-
-  if (list.empty())
-    return std::nullopt;
-
-  // select the highest patch version
-  std::sort(list.begin(), list.end());
-
-  return list.back();
+  return rebuilds;
 }

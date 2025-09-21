@@ -8,10 +8,12 @@
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
+#include "deptree.hh"
 #include "hooks.hh"
 #include "link.hh"
 #include "packages.hh"
 #include "paths.hh"
+#include "srcrelatives.hh"
 #include "thread_pool.hh"
 
 // TODO: for each package, find the exported packages in them
@@ -48,7 +50,10 @@ static std::vector<std::filesystem::path>
 build_c_cxx(ThreadPool& threads,
             ConfigurationFile const& config,
             TargetFile const& tools,
+            PackageIdentifier const& this_package_ident,
             std::filesystem::path const& cache,
+            std::filesystem::path const& c_src_folder,
+            std::filesystem::path const& cxx_src_folder,
             PackageCacheDB const& db,
             Deptree const& deptree,
             bool const release,
@@ -62,13 +67,39 @@ build_c_cxx(ThreadPool& threads,
   for (auto const& ident : includes)
     include_dirs.push_back(get_packages_include_directory(ident));
 
-  auto [cxx_object_files, cxx_futures] =
-    compile_cxx(threads, config, tools, cache, include_dirs, release, pic);
+  std::vector<std::filesystem::path> cxx_paths;
+  std::ranges::transform(config.cxx.sources,
+                         std::inserter(cxx_paths, cxx_paths.end()),
+                         [](std::string_view const in) { return in; });
 
-  auto [c_object_files, c_futures] =
-    compile_c(threads, config, tools, cache, include_dirs, release, pic);
+  std::vector<std::filesystem::path> c_paths;
+  std::ranges::transform(config.c.sources,
+                         std::inserter(c_paths, c_paths.end()),
+                         [](std::string_view const in) { return in; });
 
-  auto const obj_files = cxx_object_files + c_object_files;
+  CSourceRelatives csrc(cache, c_src_folder, c_paths);
+  CXXSourceRelatives cxxsrc(cache, cxx_src_folder, cxx_paths);
+
+  auto cxx_futures = compile_cxx(threads,
+                                 config.cxx.std.value_or(23),
+                                 config.cxx.flags,
+                                 cxxsrc,
+                                 tools,
+                                 this_package_ident,
+                                 include_dirs,
+                                 release,
+                                 pic);
+
+  auto c_futures = compile_c(threads,
+                             config.c.std.value_or(23),
+                             config.c.flags,
+                             csrc,
+                             tools,
+                             this_package_ident,
+                             include_dirs,
+                             release,
+                             pic);
+
   auto futures = std::move(cxx_futures) + std::move(c_futures);
 
   std::vector<std::string> failed_compiles;
@@ -89,6 +120,12 @@ build_c_cxx(ThreadPool& threads,
     throw std::runtime_error("fatal errors when compiling cxx source files");
   }
 
+  std::vector<std::filesystem::path> obj_files;
+  for (auto const& f : cxxsrc.files())
+    obj_files.push_back(f.object);
+  for (auto const& f : csrc.files())
+    obj_files.push_back(f.object);
+
   return obj_files;
 }
 
@@ -96,6 +133,7 @@ static void
 build_executable(ThreadPool& threads,
                  ConfigurationFile const& config,
                  TargetFile const& target,
+                 PackageIdentifier const& this_package_ident,
                  BuildOptions const& build_opts,
                  PackageCacheDB const& db,
                  Deptree const& deptree,
@@ -105,10 +143,20 @@ build_executable(ThreadPool& threads,
   auto const cache =
     get_cache_folder(target.triplet.to_string(), build_opts.release, false);
 
-  auto object_files = build_c_cxx(
-    threads, config, target, cache, db, deptree, build_opts.release, false);
+  auto object_files = build_c_cxx(threads,
+                                  config,
+                                  target,
+                                  this_package_ident,
+                                  cache,
+                                  hewg_c_src_directory_path,
+                                  hewg_cxx_src_directory_path,
+                                  db,
+                                  deptree,
+                                  build_opts.release,
+                                  false);
 
-  object_files.push_back(compile_hewgsym(config, target, false));
+  object_files.push_back(
+    compile_hewgsym(config, target, this_package_ident, false));
 
   link_executable(
     config, target, build_opts, db, deptree, object_files, emit_dir);
@@ -121,6 +169,7 @@ static void
 build_static_library(ThreadPool& threads,
                      ConfigurationFile const& config,
                      TargetFile const& target,
+                     PackageIdentifier const& this_package_ident,
                      BuildOptions const& build_opts,
                      PackageCacheDB const& db,
                      Deptree const& deptree,
@@ -134,7 +183,10 @@ build_static_library(ThreadPool& threads,
     auto const object_files = build_c_cxx(threads,
                                           config,
                                           target,
+                                          this_package_ident,
                                           non_pic_cache,
+                                          hewg_c_src_directory_path,
+                                          hewg_cxx_src_directory_path,
                                           db,
                                           deptree,
                                           build_opts.release,
@@ -149,7 +201,10 @@ build_static_library(ThreadPool& threads,
     auto const object_files = build_c_cxx(threads,
                                           config,
                                           target,
+                                          this_package_ident,
                                           pic_cache,
+                                          hewg_c_src_directory_path,
+                                          hewg_cxx_src_directory_path,
                                           db,
                                           deptree,
                                           build_opts.release,
@@ -162,6 +217,7 @@ static void
 build_shared_library(ThreadPool& threads,
                      ConfigurationFile const& config,
                      TargetFile const& target,
+                     PackageIdentifier const& this_package_ident,
                      BuildOptions const& build_opts,
                      PackageCacheDB const& db,
                      Deptree const& deptree,
@@ -170,9 +226,21 @@ build_shared_library(ThreadPool& threads,
   auto const cache =
     get_cache_folder(target.triplet.to_string(), build_opts.release, true);
 
-  auto object_files = build_c_cxx(
-    threads, config, target, cache, db, deptree, build_opts.release, true);
-  object_files.push_back(compile_hewgsym(config, target, true));
+  auto object_files = build_c_cxx(threads,
+                                  config,
+                                  target,
+                                  this_package_ident,
+                                  cache,
+                                  hewg_c_src_directory_path,
+                                  hewg_cxx_src_directory_path,
+                                  db,
+                                  deptree,
+                                  build_opts.release,
+                                  true);
+
+  object_files.push_back(
+    compile_hewgsym(config, target, this_package_ident, true));
+
   shared_link(config, target, build_opts, db, deptree, object_files, emit_dir);
 }
 
@@ -200,17 +268,17 @@ build(ThreadPool& threads,
   switch (config.meta.type) {
     case PackageType::Executable:
       build_executable(
-        threads, config, target, build_opts, db, deptree, emit_dir);
+        threads, config, target, ident, build_opts, db, deptree, emit_dir);
       break;
 
     case PackageType::StaticLibrary:
       build_static_library(
-        threads, config, target, build_opts, db, deptree, emit_dir);
+        threads, config, target, ident, build_opts, db, deptree, emit_dir);
       break;
 
     case PackageType::SharedLibrary: {
       build_shared_library(
-        threads, config, target, build_opts, db, deptree, emit_dir);
+        threads, config, target, ident, build_opts, db, deptree, emit_dir);
     } break;
 
       // header only projects

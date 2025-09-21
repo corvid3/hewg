@@ -3,6 +3,7 @@
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
+#include "deptree.hh"
 #include "packages.hh"
 #include "target.hh"
 #include <filesystem>

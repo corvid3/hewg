@@ -14,6 +14,7 @@
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
+#include "packages.hh"
 #include "paths.hh"
 #include "semver.hh"
 #include "thread_pool.hh"
@@ -36,7 +37,9 @@ constexpr auto generate_file_flags =
 };
 
 constexpr auto generate_common_flags =
-  [](bool const is_release, bool const PIC) static -> std::vector<std::string> {
+  [](PackageIdentifier const& this_ident,
+     bool const is_release,
+     bool const PIC) static -> std::vector<std::string> {
   static const std::vector<std::string> common_flags = {
     "-c",
     "-Iprivate",
@@ -54,25 +57,35 @@ constexpr auto generate_common_flags =
   if (PIC)
     copy = copy + std::vector<std::string>{ "-fPIC" };
 
+  copy = copy + std::vector<std::string>{ std::format("-DHEWG_ORG={}",
+                                                      this_ident.org()) };
+
+  copy = copy + std::vector<std::string>{ std::format("-DHEWG_NAME={}",
+                                                      this_ident.name()) };
+
   return copy;
 };
 
-constexpr auto generate_c_flags =
-  [](ConfigurationFile const& config,
+const auto generate_c_flags =
+  [](std::span<std::string const> user_flags,
+     int const std,
+     PackageIdentifier const& ident,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.c.flags +
-         std::vector{ std::format(
-           "-std={}", get_c_standard_string(config.c.std.value_or(17))) };
+  return generate_common_flags(ident, is_release, PIC) +
+         std::vector(user_flags.begin(), user_flags.end()) +
+         std::vector{ std::format("-std={}", get_c_standard_string(std)) };
 };
 
-constexpr auto generate_cxx_flags =
-  [](ConfigurationFile const& config,
+const auto generate_cxx_flags =
+  [](std::span<std::string const> user_flags,
+     int const std,
+     PackageIdentifier const& ident,
      bool const is_release,
      bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(is_release, PIC) + config.cxx.flags +
-         std::vector{ std::format(
-           "-std={}", get_cxx_standard_string(config.cxx.std.value_or(20))) };
+  return generate_common_flags(ident, is_release, PIC) +
+         std::vector(user_flags.begin(), user_flags.end()) +
+         std::vector{ std::format("-std={}", get_cxx_standard_string(std)) };
 };
 
 struct format_data
@@ -126,128 +139,149 @@ print_status(format_data& formatting,
 // if the task failed
 static std::future<std::optional<std::string>>
 start_cxx_compile_task(ThreadPool& thread_pool,
-                       ConfigurationFile const&,
                        TargetFile const& tool_file,
-                       std::filesystem::path const source_filepath,
-                       std::filesystem::path const object_filepath,
-                       std::filesystem::path const depend_filepath,
+                       CXXSourceRelatives const& relatives,
+                       CXXSourceRelatives::File const& file,
                        std::vector<std::string> common_flags,
                        std::shared_ptr<format_data> formatting)
 {
-  return thread_pool.add_job([source_filepath,
-                              object_filepath,
-                              depend_filepath,
-                              common_flags,
-                              formatting,
-                              &tool_file,
-                              &thread_pool]() -> std::optional<std::string> {
-    auto const relative_source_path =
-      std::filesystem::relative(source_filepath, hewg_cxx_src_directory_path);
+  return thread_pool.add_job(
+    [common_flags, formatting, &tool_file, &thread_pool, &relatives, &file]()
+      -> std::optional<std::string> {
+      auto const relative_source_path =
+        std::filesystem::relative(file.source, relatives.source_directory());
 
-    print_status(*formatting, "CXX", relative_source_path);
+      print_status(*formatting, "CXX", relative_source_path);
 
-    auto const [exit_code, what] = run_command(
-      tool_file.cxx,
-      common_flags +
-        generate_file_flags(source_filepath, depend_filepath, object_filepath));
+      auto const [exit_code, what] =
+        run_command(tool_file.cxx,
+                    common_flags + generate_file_flags(
+                                     file.source, file.depends, file.object));
 
-    if (exit_code != 0) {
-      thread_pool.drain();
-      return relative_source_path.string();
-      // write_error_file(source_filepath, what);
-    }
+      if (exit_code != 0) {
+        thread_pool.drain();
+        return relative_source_path.string();
+        // write_error_file(source_filepath, what);
+      }
 
-    return std::nullopt;
-  });
+      return std::nullopt;
+    });
 }
 
 static std::future<std::optional<std::string>>
 start_c_compile_task(ThreadPool& thread_pool,
-                     ConfigurationFile const&,
                      TargetFile const& tool_file,
-                     std::filesystem::path const source_filepath,
-                     std::filesystem::path const object_filepath,
-                     std::filesystem::path const depend_filepath,
+                     CSourceRelatives const& relatives,
+                     CSourceRelatives::File const& file,
                      std::vector<std::string> common_flags,
                      std::shared_ptr<format_data> formatting)
 {
-  return thread_pool.add_job([source_filepath,
-                              object_filepath,
-                              depend_filepath,
-                              common_flags,
-                              formatting,
-                              &tool_file,
-                              &thread_pool]() -> std::optional<std::string> {
-    auto const relative_source_path =
-      std::filesystem::relative(source_filepath, hewg_c_src_directory_path);
+  return thread_pool.add_job(
+    [&relatives, &file, common_flags, formatting, &tool_file, &thread_pool]()
+      -> std::optional<std::string> {
+      auto const relative_source_path =
+        std::filesystem::relative(file.source, relatives.source_directory());
 
-    print_status(*formatting, "C", relative_source_path);
+      print_status(*formatting, "C", relative_source_path);
 
-    auto const [exit_code, what] = run_command(
-      tool_file.cc,
-      common_flags +
-        generate_file_flags(source_filepath, depend_filepath, object_filepath));
+      auto const [exit_code, what] =
+        run_command(tool_file.cc,
+                    common_flags + generate_file_flags(
+                                     file.source, file.depends, file.object));
 
-    if (exit_code != 0) {
-      thread_pool.drain();
-      return relative_source_path.string();
-      // write_error_file(source_filepath, what);
-    }
+      if (exit_code != 0) {
+        thread_pool.drain();
+        return relative_source_path.string();
+        // write_error_file(source_filepath, what);
+      }
 
-    return std::nullopt;
-  });
+      return std::nullopt;
+    });
 }
 
 static std::string
-emit_symcache_contents(std::string_view package_name, SemVer const& version)
+emit_symcache_contents(PackageType const this_package_type,
+                       PackageIdentifier const& ident)
 {
+  auto const& version = ident.version();
+
   std::string out;
 
-  out += std::format("int __hewg_version_package_{}[3] = {{ {}, {}, {} }};\n",
-                     package_name,
+  out += std::format("int __hewg_{}_{}_version[3] = {{ {}, {}, {} }};",
+                     ident.org(),
+                     ident.name(),
                      version.major(),
                      version.minor(),
                      version.patch());
 
+  out += "\n";
+
   if (auto const pre = version.prerelease())
-    out +=
-      std::format("char const* __hewg_prerelease_package_hewg = \"{}\";", *pre);
+    out += std::format("char const* __hewg_{}_{}_prerelease = \"{}\";",
+                       ident.org(),
+                       ident.name(),
+                       *pre);
   else
-    out += std::format(
-      "char const* __hewg_prerelease_package_hewg = (char const*)0;");
+    out += std::format("char const* __hewg_{}_{}_prerelease = (char const*)0;",
+                       ident.org(),
+                       ident.name());
+
+  out += "\n";
 
   if (auto const meta = version.metadata())
-    out +=
-      std::format("char const* __hewg_metadata_package_hewg = \"{}\";", *meta);
+    out += std::format("char const* __hewg_{}_{}_metadata = \"{}\";",
+                       ident.org(),
+                       ident.name(),
+                       *meta);
   else
-    out +=
-      std::format("char const* __hewg_metadata_package_hewg = (char const*)0;");
+    out += std::format("char const* __hewg_{}_{}_metadata = (char const*)0;",
+                       ident.org(),
+                       ident.name());
+
+  out += "\n";
+
+  out += std::format("char const* __hewg_{}_{}_build_target_triplet[3] = {{ "
+                     "\"{}\", \"{}\", \"{}\" }};",
+                     ident.org(),
+                     ident.name(),
+                     ident.target().architecture(),
+                     ident.target().os(),
+                     ident.target().vendor());
+
+  out += "\n";
+
+  if (this_package_type == PackageType::Executable) {
+    // TODO: hewg bundling, later
+    // this is just set up in advance so i can eventually set up bundling
+    out += std::format("int const __hewg_bundled = 1;");
+    out += "\n";
+  }
 
   using namespace std::chrono;
 
   auto const now = duration_cast<seconds>(utc_clock::now().time_since_epoch());
 
-  out += std::format(
-    "long __hewg_build_date_package_{} = {};\n", package_name, now.count());
+  out += std::format("long __hewg_{}_{}_build_date = {};",
+                     ident.org(),
+                     ident.name(),
+                     now.count());
+
+  out += "\n";
 
   return out;
 }
 
 std::filesystem::path
-compile_hewgsym(ConfigurationFile const& config,
+compile_hewgsym(ConfigurationFile const& conf,
                 TargetFile const& tools,
+                PackageIdentifier const& this_ident,
                 bool PIC)
 {
   auto const object_file_name =
     PIC ? hewg_builtinsym_obj_pic_path : hewg_builtinsym_obj_path;
 
-  auto const version = parse_semver(config.project.version);
-  if (not version)
-    throw std::runtime_error(
-      "invalid project version while attempting to create hewgsym table");
-
   std::ofstream(hewg_builtinsym_src_path)
-    << emit_symcache_contents(config.project.name, *version);
+    << emit_symcache_contents(conf.meta.type, this_ident);
 
   std::vector<std::string> args;
   args.push_back("-O2");
@@ -264,11 +298,10 @@ compile_hewgsym(ConfigurationFile const& config,
 }
 
 static auto
-ensure_object_output_paths_exist(
-  std::span<std::filesystem::path const> object_filepaths)
+ensure_object_output_paths_exist(auto const& relatives)
 {
-  for (auto const& path : object_filepaths)
-    std::filesystem::create_directories(path.parent_path());
+  for (auto const& path : relatives.files())
+    std::filesystem::create_directories(path.object.parent_path());
 }
 
 /*
@@ -288,29 +321,23 @@ ensure_object_output_paths_exist(
 // starts compilation for cxx
 // without blocking
 // make sure you synchronize the threads after this!
-std::pair<std::vector<std::filesystem::path>,
-          std::vector<std::future<std::optional<std::string>>>>
+std::vector<std::future<std::optional<std::string>>>
 compile_cxx(ThreadPool& threads,
-            ConfigurationFile const& config,
+            int const std,
+            std::span<std::string const> extra_flags,
+            CXXSourceRelatives const& src,
             TargetFile const& tools,
-            std::filesystem::path const& cache_folder,
+            PackageIdentifier const& this_package_ident,
             std::span<std::filesystem::path const> include_directories,
             bool const release,
             bool const PIC)
 {
-  auto const cxx_filepaths = get_cxx_source_filepaths(config);
-  std::vector<std::filesystem::path> cxx_objects;
-  std::ranges::transform(cxx_filepaths,
-                         std::inserter(cxx_objects, cxx_objects.end()),
-                         [=](std::filesystem::path const& path) {
-                           return object_file_for_cxx(cache_folder, path);
-                         });
+  ensure_object_output_paths_exist(src);
 
-  ensure_object_output_paths_exist(cxx_objects);
+  auto const cxx_rebuilds = mark_cxx_files_for_rebuild(src);
 
-  auto const cxx_rebuilds =
-    mark_cxx_files_for_rebuild(cache_folder, cxx_filepaths);
-  auto cxx_flags = generate_cxx_flags(config, release, PIC);
+  auto cxx_flags =
+    generate_cxx_flags(extra_flags, std, this_package_ident, release, PIC);
 
   for (auto const& dir : include_directories)
     cxx_flags.push_back(
@@ -335,45 +362,29 @@ compile_cxx(ThreadPool& threads,
   std::vector<std::future<std::optional<std::string>>> awaits;
 
   for (auto const& rebuild : cxx_rebuilds) {
-    auto const object_filepath = object_file_for_cxx(cache_folder, rebuild);
-    auto const depend_filepath = depfile_for_cxx(cache_folder, rebuild);
-
-    awaits.push_back(start_cxx_compile_task(threads,
-                                            config,
-                                            tools,
-                                            rebuild,
-                                            object_filepath,
-                                            depend_filepath,
-                                            cxx_flags,
-                                            formatting));
+    awaits.push_back(start_cxx_compile_task(
+      threads, tools, src, rebuild.get(), cxx_flags, formatting));
   }
 
-  return std::pair{ cxx_objects, std::move(awaits) };
+  return awaits;
 }
 
-std::pair<std::vector<std::filesystem::path>,
-          std::vector<std::future<std::optional<std::string>>>>
+std::vector<std::future<std::optional<std::string>>>
 compile_c(ThreadPool& threads,
-          ConfigurationFile const& config,
+          int const std,
+          std::span<std::string const> extra_flags,
+          CSourceRelatives const& src,
           TargetFile const& tools,
-          std::filesystem::path const& cache_folder,
+          PackageIdentifier const& this_package_ident,
           std::span<std::filesystem::path const> include_directories,
           bool const release,
           bool const PIC)
 {
-  auto const c_filepaths = get_c_source_filepaths(config);
-  std::vector<std::filesystem::path> c_objects;
+  ensure_object_output_paths_exist(src);
+  auto const c_rebuilds = mark_c_files_for_rebuild(src);
 
-  std::ranges::transform(c_filepaths,
-                         std::inserter(c_objects, c_objects.end()),
-                         [=](std::filesystem::path const& path) {
-                           return object_file_for_c(cache_folder, path);
-                         });
-
-  ensure_object_output_paths_exist(c_objects);
-
-  auto const c_rebuilds = mark_c_files_for_rebuild(cache_folder, c_filepaths);
-  auto c_flags = generate_c_flags(config, release, PIC);
+  auto c_flags =
+    generate_c_flags(extra_flags, std, this_package_ident, release, PIC);
 
   for (auto const& dir : include_directories)
     c_flags.push_back(
@@ -398,18 +409,9 @@ compile_c(ThreadPool& threads,
   std::vector<std::future<std::optional<std::string>>> awaits;
 
   for (auto const& rebuild : c_rebuilds) {
-    auto const object_file = object_file_for_c(cache_folder, rebuild);
-    auto const depend_file = depfile_for_c(cache_folder, rebuild);
-
-    awaits.push_back(start_c_compile_task(threads,
-                                          config,
-                                          tools,
-                                          rebuild,
-                                          object_file,
-                                          depend_file,
-                                          c_flags,
-                                          formatting));
+    awaits.push_back(
+      start_c_compile_task(threads, tools, src, rebuild, c_flags, formatting));
   }
 
-  return { c_objects, std::move(awaits) };
+  return awaits;
 }
