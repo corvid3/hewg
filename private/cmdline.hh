@@ -58,10 +58,16 @@ struct BuildOptions : terse::TerminalSubcommand
   bool help = false;
   bool release = false;
   bool install = false;
+  bool gen_compile_commands = false;
   std::optional<std::string> target = std::nullopt;
 
   using options = std::tuple<
     terse::Option<"help", 'h', "prints this help", &BuildOptions::help>,
+    terse::Option<
+      "gencompcmds",
+      std::nullopt,
+      "generates C/CXX compile commands database json file for use with clangd",
+      &BuildOptions::gen_compile_commands>,
     terse::Option<"release",
                   std::nullopt,
                   "changes the build type to release mode, enabling "

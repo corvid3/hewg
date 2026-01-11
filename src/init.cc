@@ -39,6 +39,13 @@ sources = { }
 [hooks.postbuild]
 )";
 
+auto static const gitignore_template = R"(
+.hcache
+.cache
+target/
+compile_commands.json
+)";
+
 std::regex static const hewg_version_regex("%HEWG-VERSION%");
 std::regex static const project_type_regex("%PROJECT-TYPE%");
 std::regex static const org_regex("%ORG%");
@@ -157,4 +164,6 @@ init(InitOptions const& options, std::span<std::string const> bares)
       std::ofstream(install_directory / "hewg.scl") << file;
     } break;
   }
+
+  std::ofstream(install_directory / ".gitignore") << gitignore_template;
 }

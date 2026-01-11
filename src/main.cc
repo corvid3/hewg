@@ -115,11 +115,7 @@ try {
     auto const target_file = get_target_file(target_triplet);
     ConfigurationFile const config =
       get_config_file(tl_options, target_triplet, config_path);
-
-    // build_dependency_tree(config);
-
     auto db = open_package_db();
-
     build(thread_pool, config, db, target_file, options);
 
     if (options.install)

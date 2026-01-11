@@ -20,11 +20,11 @@
 #include "semver.hh"
 #include "thread_pool.hh"
 
-constexpr auto generate_file_flags =
-  [](std::filesystem::path const filepath,
-     std::filesystem::path const depfile,
-     std::filesystem::path const object_file) static
-  -> std::vector<std::string> {
+std::vector<std::string>
+generate_c_cxx_file_flags(std::filesystem::path const filepath,
+                          std::filesystem::path const depfile,
+                          std::filesystem::path const object_file)
+{
   using std::filesystem::relative;
 
   return {
@@ -67,26 +67,41 @@ constexpr auto generate_common_flags =
   return copy;
 };
 
-const auto generate_c_flags =
-  [](std::span<std::string const> user_flags,
-     int const std,
-     PackageIdentifier const& ident,
-     bool const is_release,
-     bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(ident, is_release, PIC) +
-         std::vector(user_flags.begin(), user_flags.end()) +
-         std::vector{ std::format("-std={}", get_c_standard_string(std)) };
+std::vector<std::string>
+generate_c_flags(std::span<std::string const> user_flags,
+                 std::span<std::filesystem::path const> include_dirs,
+                 int const std,
+                 PackageIdentifier const& ident,
+                 bool const is_release,
+                 bool const PIC)
+{
+  auto out = generate_common_flags(ident, is_release, PIC) +
+             std::vector(user_flags.begin(), user_flags.end()) +
+             std::vector{ std::format("-std={}", get_c_standard_string(std)) };
+
+  for (auto const& dir : include_dirs)
+    out.push_back(std::format("-I{}", std::filesystem::absolute(dir).string()));
+
+  return out;
 };
 
-const auto generate_cxx_flags =
-  [](std::span<std::string const> user_flags,
-     int const std,
-     PackageIdentifier const& ident,
-     bool const is_release,
-     bool const PIC) static -> std::vector<std::string> {
-  return generate_common_flags(ident, is_release, PIC) +
-         std::vector(user_flags.begin(), user_flags.end()) +
-         std::vector{ std::format("-std={}", get_cxx_standard_string(std)) };
+std::vector<std::string>
+generate_cxx_flags(std::span<std::string const> user_flags,
+                   std::span<std::filesystem::path const> include_dirs,
+                   int const std,
+                   PackageIdentifier const& ident,
+                   bool const is_release,
+                   bool const PIC)
+{
+  auto out =
+    generate_common_flags(ident, is_release, PIC) +
+    std::vector(user_flags.begin(), user_flags.end()) +
+    std::vector{ std::format("-std={}", get_cxx_standard_string(std)) };
+
+  for (auto const& dir : include_dirs)
+    out.push_back(std::format("-I{}", std::filesystem::absolute(dir).string()));
+
+  return out;
 };
 
 struct format_data
@@ -154,9 +169,9 @@ start_cxx_compile_task(ThreadPool& thread_pool,
       auto const [exit_code, what] = run_command(
         tool_file.cxx,
         common_flags +
-          generate_file_flags(relatives.source_directory() / file.source,
-                              relatives.cache_directory() / file.depends,
-                              relatives.cache_directory() / file.object));
+          generate_c_cxx_file_flags(relatives.source_directory() / file.source,
+                                    relatives.cache_directory() / file.depends,
+                                    relatives.cache_directory() / file.object));
 
       if (exit_code != 0) {
         thread_pool.drain();
@@ -184,9 +199,9 @@ start_c_compile_task(ThreadPool& thread_pool,
       auto const [exit_code, what] = run_command(
         tool_file.cc,
         common_flags +
-          generate_file_flags(relatives.source_directory() / file.source,
-                              relatives.cache_directory() / file.depends,
-                              relatives.cache_directory() / file.object));
+          generate_c_cxx_file_flags(relatives.source_directory() / file.source,
+                                    relatives.cache_directory() / file.depends,
+                                    relatives.cache_directory() / file.object));
 
       if (exit_code != 0) {
         thread_pool.drain();
@@ -315,14 +330,9 @@ compile_hewgsym(ConfigurationFile const& conf,
 // make sure you synchronize the threads after this!
 std::vector<std::future<std::optional<std::string>>>
 compile_cxx(ThreadPool& threads,
-            int const std,
-            std::span<std::string const> extra_flags,
+            std::span<std::string const> flags,
             CXXSourceRelatives const& src,
-            TargetFile const& tools,
-            PackageIdentifier const& this_package_ident,
-            std::span<std::filesystem::path const> include_directories,
-            bool const release,
-            bool const PIC)
+            TargetFile const& tools)
 {
   {
     for (auto const& path : src.files())
@@ -332,16 +342,9 @@ compile_cxx(ThreadPool& threads,
 
   auto const cxx_rebuilds = mark_cxx_files_for_rebuild(src);
 
-  auto cxx_flags =
-    generate_cxx_flags(extra_flags, std, this_package_ident, release, PIC);
-
-  for (auto const& dir : include_directories)
-    cxx_flags.push_back(
-      std::format("-I{}", std::filesystem::absolute(dir).string()));
-
   {
     std::string cxx_flags_fmt;
-    std::ranges::for_each(cxx_flags, [&](std::string_view in) {
+    std::ranges::for_each(flags, [&](std::string_view in) {
       cxx_flags_fmt += in, cxx_flags_fmt += ' ';
     });
 
@@ -359,7 +362,12 @@ compile_cxx(ThreadPool& threads,
 
   for (auto const& rebuild : cxx_rebuilds) {
     awaits.push_back(start_cxx_compile_task(
-      threads, tools, src, rebuild.get(), cxx_flags, formatting));
+      threads,
+      tools,
+      src,
+      rebuild.get(),
+      std::vector<std::string>{ flags.begin(), flags.end() },
+      formatting));
   }
 
   return awaits;
@@ -367,14 +375,9 @@ compile_cxx(ThreadPool& threads,
 
 std::vector<std::future<std::optional<std::string>>>
 compile_c(ThreadPool& threads,
-          int const std,
-          std::span<std::string const> extra_flags,
+          std::span<std::string const> flags,
           CSourceRelatives const& src,
-          TargetFile const& tools,
-          PackageIdentifier const& this_package_ident,
-          std::span<std::filesystem::path const> include_directories,
-          bool const release,
-          bool const PIC)
+          TargetFile const& tools)
 {
   {
     for (auto const& path : src.files())
@@ -384,16 +387,9 @@ compile_c(ThreadPool& threads,
 
   auto const c_rebuilds = mark_c_files_for_rebuild(src);
 
-  auto c_flags =
-    generate_c_flags(extra_flags, std, this_package_ident, release, PIC);
-
-  for (auto const& dir : include_directories)
-    c_flags.push_back(
-      std::format("-I{}", std::filesystem::absolute(dir).string()));
-
   {
     std::string c_flags_fmt;
-    std::ranges::for_each(c_flags, [&](std::string_view in) {
+    std::ranges::for_each(flags, [&](std::string_view in) {
       c_flags_fmt += in, c_flags_fmt += ' ';
     });
 
@@ -410,8 +406,13 @@ compile_c(ThreadPool& threads,
   std::vector<std::future<std::optional<std::string>>> awaits;
 
   for (auto const& rebuild : c_rebuilds) {
-    awaits.push_back(
-      start_c_compile_task(threads, tools, src, rebuild, c_flags, formatting));
+    awaits.push_back(start_c_compile_task(
+      threads,
+      tools,
+      src,
+      rebuild,
+      std::vector<std::string>{ flags.begin(), flags.end() },
+      formatting));
   }
 
   return awaits;

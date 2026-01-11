@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
+#include "crow.jayson/jayson.hh"
 #include "deptree.hh"
 #include "hooks.hh"
 #include "link.hh"
@@ -16,34 +18,6 @@
 #include "paths.hh"
 #include "srcrelatives.hh"
 #include "thread_pool.hh"
-
-// TODO: for each package, find the exported packages in them
-// build a graph, check for version clashes, etc,
-// then also add them as includes
-// static std::vector<std::filesystem::path>
-// get_include_directories_for_packages(ConfigurationFile const& config)
-// {
-//   std::vector<std::filesystem::path> include_dirs;
-
-//   auto const& packages = config.libs.packages;
-
-//   for (auto const& [name, version] : packages) {
-//     auto const package = try_get_compatable_package(name, version);
-
-//     if (not package)
-//       throw std::runtime_error(
-//         std::format("unable to get compatable version <{}> for package <{}> "
-//                     "while searching for headers",
-//                     version_triplet_to_string(version),
-//                     name));
-
-//     auto const package_include_dir = (*package) / "include";
-
-//     include_dirs.push_back(package_include_dir);
-//   }
-
-//   return include_dirs;
-// }
 
 // helper function to build both
 // c/cxx and return the object files
@@ -58,7 +32,8 @@ build_c_cxx(ThreadPool& threads,
             PackageCacheDB const& db,
             Deptree const& deptree,
             bool const release,
-            bool const pic)
+            bool const pic,
+            bool const gen_cc)
 {
   std::vector<std::filesystem::path> include_dirs;
 
@@ -81,26 +56,52 @@ build_c_cxx(ThreadPool& threads,
   CSourceRelatives csrc(cache, c_src_folder, c_paths);
   CXXSourceRelatives cxxsrc(cache, cxx_src_folder, cxx_paths);
 
-  auto cxx_futures = compile_cxx(threads,
-                                 config.cxx.std.value_or(23),
-                                 config.cxx.flags,
-                                 cxxsrc,
-                                 tools,
-                                 this_package_ident,
-                                 include_dirs,
-                                 release,
-                                 pic);
+  auto const c_flags = generate_c_flags(config.c.flags,
+                                        include_dirs,
+                                        config.c.std.value_or(23),
+                                        this_package_ident,
+                                        release,
+                                        pic);
 
-  auto c_futures = compile_c(threads,
-                             config.c.std.value_or(23),
-                             config.c.flags,
-                             csrc,
-                             tools,
-                             this_package_ident,
-                             include_dirs,
-                             release,
-                             pic);
+  auto const cxx_flags = generate_cxx_flags(config.cxx.flags,
+                                            include_dirs,
+                                            config.cxx.std.value_or(23),
+                                            this_package_ident,
+                                            release,
+                                            pic);
 
+  if (gen_cc) {
+    jayson::array database;
+    jayson::array cxx_args{ tools.cxx };
+    jayson::array c_args{ tools.cc };
+
+    for (auto const& flag : c_flags)
+      c_args.push_back(flag);
+    for (auto const& flag : cxx_flags)
+      cxx_args.push_back(flag);
+
+    for (auto const& file : csrc.files()) {
+      jayson::obj fragment;
+      fragment["directory"] = std::filesystem::current_path();
+      fragment["arguments"] = c_args;
+      fragment["file"] = "csrc" / file.source;
+      database.push_back(std::move(fragment));
+    }
+
+    for (auto const& file : cxxsrc.files()) {
+      jayson::obj fragment;
+      fragment["directory"] = std::filesystem::current_path();
+      fragment["arguments"] = cxx_args;
+      fragment["file"] = "src" / file.source;
+      database.push_back(std::move(fragment));
+    }
+
+    std::ofstream("compile_commands.json")
+      << jayson::val(database).serialize(true);
+  }
+
+  auto cxx_futures = compile_cxx(threads, cxx_flags, cxxsrc, tools);
+  auto c_futures = compile_c(threads, c_flags, csrc, tools);
   auto futures = std::move(cxx_futures) + std::move(c_futures);
 
   std::vector<std::string> failed_compiles;
@@ -154,7 +155,8 @@ build_executable(ThreadPool& threads,
                                   db,
                                   deptree,
                                   build_opts.release,
-                                  false);
+                                  false,
+                                  build_opts.gen_compile_commands);
 
   object_files.push_back(
     compile_hewgsym(config, target, this_package_ident, false));
@@ -191,7 +193,8 @@ build_static_library(ThreadPool& threads,
                                           db,
                                           deptree,
                                           build_opts.release,
-                                          false);
+                                          false,
+                                          build_opts.gen_compile_commands);
     pack_static_library(config, target, object_files, emit_dir, false);
   }
 
@@ -209,7 +212,8 @@ build_static_library(ThreadPool& threads,
                                           db,
                                           deptree,
                                           build_opts.release,
-                                          true);
+                                          true,
+                                          build_opts.gen_compile_commands);
     pack_static_library(config, target, object_files, emit_dir, true);
   }
 }
@@ -237,7 +241,8 @@ build_shared_library(ThreadPool& threads,
                                   db,
                                   deptree,
                                   build_opts.release,
-                                  true);
+                                  true,
+                                  build_opts.gen_compile_commands);
 
   object_files.push_back(
     compile_hewgsym(config, target, this_package_ident, true));
@@ -263,7 +268,6 @@ build(ThreadPool& threads,
 
   auto const ident = get_this_package_ident(config, target.triplet);
   auto const emit_dir = get_artifact_folder(ident);
-
   auto const deptree = build_dependency_tree(config, db, target.triplet);
 
   switch (config.meta.type) {

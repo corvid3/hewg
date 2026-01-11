@@ -22,25 +22,15 @@
  */
 std::vector<std::future<std::optional<std::string>>>
 compile_cxx(ThreadPool& pool,
-            int const std,
-            std::span<std::string const> extra_flags,
+            std::span<std::string const> flags,
             CXXSourceRelatives const& source_relatives,
-            TargetFile const& tools,
-            PackageIdentifier const& this_package_ident,
-            std::span<std::filesystem::path const> include_directories,
-            bool const release,
-            bool const PIC);
+            TargetFile const& tools);
 
 std::vector<std::future<std::optional<std::string>>>
 compile_c(ThreadPool& pool,
-          int const std,
-          std::span<std::string const> extra_flags,
+          std::span<std::string const> flags,
           CSourceRelatives const& source_relatives,
-          TargetFile const& tools,
-          PackageIdentifier const& this_package_ident,
-          std::span<std::filesystem::path const> include_directories,
-          bool const release,
-          bool const PIC);
+          TargetFile const& tools);
 
 // builds the special hewg symbols object file
 // and returns a path to it
@@ -49,3 +39,24 @@ compile_hewgsym(ConfigurationFile const& config,
                 TargetFile const& tools,
                 PackageIdentifier const& this_package_ident,
                 bool PIC);
+
+std::vector<std::string>
+generate_c_cxx_file_flags(std::filesystem::path const filepath,
+                          std::filesystem::path const depfile,
+                          std::filesystem::path const object_file);
+
+std::vector<std::string>
+generate_c_flags(std::span<std::string const> user_flags,
+                 std::span<std::filesystem::path const> include_dirs,
+                 int const std,
+                 PackageIdentifier const& ident,
+                 bool const is_release,
+                 bool const PIC);
+
+std::vector<std::string>
+generate_cxx_flags(std::span<std::string const> user_flags,
+                   std::span<std::filesystem::path const> include_dirs,
+                   int const std,
+                   PackageIdentifier const& ident,
+                   bool const is_release,
+                   bool const PIC);

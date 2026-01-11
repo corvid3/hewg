@@ -6,6 +6,8 @@
 *.a
 *.d
 
+compile_commands.json
+.cache
 local_todo
 bin/*
 err/
