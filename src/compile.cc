@@ -8,6 +8,7 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <print>
 #include <span>
 
 #include "analysis.hh"
@@ -52,7 +53,7 @@ constexpr auto generate_common_flags =
   if (is_release)
     copy = copy + std::vector<std::string>{ "-O2" };
   else
-    copy = copy + std::vector<std::string>{ "-Og", "-g" };
+    copy = copy + std::vector<std::string>{ "-O0", "-g" };
 
   if (PIC)
     copy = copy + std::vector<std::string>{ "-fPIC" };
@@ -148,19 +149,18 @@ start_cxx_compile_task(ThreadPool& thread_pool,
   return thread_pool.add_job(
     [common_flags, formatting, &tool_file, &thread_pool, &relatives, &file]()
       -> std::optional<std::string> {
-      auto const relative_source_path =
-        std::filesystem::relative(file.source, relatives.source_directory());
+      print_status(*formatting, "CXX", file.source);
 
-      print_status(*formatting, "CXX", relative_source_path);
-
-      auto const [exit_code, what] =
-        run_command(tool_file.cxx,
-                    common_flags + generate_file_flags(
-                                     file.source, file.depends, file.object));
+      auto const [exit_code, what] = run_command(
+        tool_file.cxx,
+        common_flags +
+          generate_file_flags(relatives.source_directory() / file.source,
+                              relatives.cache_directory() / file.depends,
+                              relatives.cache_directory() / file.object));
 
       if (exit_code != 0) {
         thread_pool.drain();
-        return relative_source_path.string();
+        return file.source.string();
         // write_error_file(source_filepath, what);
       }
 
@@ -179,19 +179,18 @@ start_c_compile_task(ThreadPool& thread_pool,
   return thread_pool.add_job(
     [&relatives, &file, common_flags, formatting, &tool_file, &thread_pool]()
       -> std::optional<std::string> {
-      auto const relative_source_path =
-        std::filesystem::relative(file.source, relatives.source_directory());
+      print_status(*formatting, "C", file.source);
 
-      print_status(*formatting, "C", relative_source_path);
-
-      auto const [exit_code, what] =
-        run_command(tool_file.cc,
-                    common_flags + generate_file_flags(
-                                     file.source, file.depends, file.object));
+      auto const [exit_code, what] = run_command(
+        tool_file.cc,
+        common_flags +
+          generate_file_flags(relatives.source_directory() / file.source,
+                              relatives.cache_directory() / file.depends,
+                              relatives.cache_directory() / file.object));
 
       if (exit_code != 0) {
         thread_pool.drain();
-        return relative_source_path.string();
+        return file.source.string();
         // write_error_file(source_filepath, what);
       }
 
@@ -297,13 +296,6 @@ compile_hewgsym(ConfigurationFile const& conf,
   return object_file_name;
 }
 
-static auto
-ensure_object_output_paths_exist(auto const& relatives)
-{
-  for (auto const& path : relatives.files())
-    std::filesystem::create_directories(path.object.parent_path());
-}
-
 /*
   for executables,
   just compile the object files once,
@@ -332,7 +324,11 @@ compile_cxx(ThreadPool& threads,
             bool const release,
             bool const PIC)
 {
-  ensure_object_output_paths_exist(src);
+  {
+    for (auto const& path : src.files())
+      std::filesystem::create_directories(path.object.parent_path()),
+        std::filesystem::create_directories(path.depends.parent_path());
+  }
 
   auto const cxx_rebuilds = mark_cxx_files_for_rebuild(src);
 
@@ -380,7 +376,12 @@ compile_c(ThreadPool& threads,
           bool const release,
           bool const PIC)
 {
-  ensure_object_output_paths_exist(src);
+  {
+    for (auto const& path : src.files())
+      std::filesystem::create_directories(path.object.parent_path()),
+        std::filesystem::create_directories(path.depends.parent_path());
+  }
+
   auto const c_rebuilds = mark_c_files_for_rebuild(src);
 
   auto c_flags =

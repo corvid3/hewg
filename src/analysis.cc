@@ -5,6 +5,7 @@
 #include <format>
 #include <functional>
 #include <optional>
+#include <print>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <system_error>
@@ -288,8 +289,10 @@ mark_c_files_for_rebuild(CSourceRelatives const& src)
      * must be rebuilt
      */
     if (not std::filesystem::exists(src.cache_directory() / file.depends) or
-        not std::filesystem::exists(src.cache_directory() / file.object))
+        not std::filesystem::exists(src.cache_directory() / file.object)) {
       rebuilds.push_back(file);
+      continue;
+    }
 
     auto const obj_md = *get_modification_date_of_file(file.object);
     auto const depfile = parse_depfile(file.depends);
@@ -322,8 +325,10 @@ mark_cxx_files_for_rebuild(CXXSourceRelatives const& src)
      * must be rebuilt
      */
     if (not std::filesystem::exists(src.cache_directory() / file.depends) or
-        not std::filesystem::exists(src.cache_directory() / file.object))
+        not std::filesystem::exists(src.cache_directory() / file.object)) {
       rebuilds.push_back(file);
+      continue;
+    }
 
     auto const obj_md = *get_modification_date_of_file(file.object);
     auto const depfile = parse_depfile(file.depends);

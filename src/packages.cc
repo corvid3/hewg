@@ -13,9 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "analysis.hh"
 #include "common.hh"
-#include "confs.hh"
 #include "packages.hh"
 #include "paths.hh"
 #include "semver.hh"

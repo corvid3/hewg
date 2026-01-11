@@ -1,7 +1,12 @@
+#include <algorithm>
 #include <crow.datalogpp/datalogpp.hh>
+#include <print>
+#include <set>
+#include <stdexcept>
 
 #include "analysis.hh"
 #include "deptree.hh"
+#include "packages.hh"
 
 using namespace datalogpp;
 
@@ -15,7 +20,51 @@ struct DeptreeCtx
   Interpreter interpreter;
   Predicate &package, &dependency, &dependency_path,
     &repeat_dependency_siblings, &static_to_static_deps, &exists_extern,
-    &dependency_cycle, &extern_chain;
+    &dependency_cycle, &extern_chain, &static_domain, &dynamic_dependency,
+    &include_headers;
+
+  auto collect_static_domain(PackageIdentifier const& ident)
+  {
+    return interpreter.query(
+      std::array{ "StaticDomain"_p(ident.org(),
+                                   ident.name(),
+                                   std::format("{}", ident.version()),
+                                   ident.target().to_string(),
+                                   "ORG"_V,
+                                   "NAME"_V,
+                                   "VERSION"_V,
+                                   "TARGET"_V) });
+  }
+
+  auto collect_packages_by_name_in_static_domain(
+    PackageIdentifier const& owner_ident,
+    std::string org,
+    std::string name,
+    std::string target)
+  {
+    return interpreter.query(
+      std::array{ "StaticDomain"_p(owner_ident.org(),
+                                   owner_ident.name(),
+                                   std::format("{}", owner_ident.version()),
+                                   owner_ident.target().to_string(),
+                                   org,
+                                   name,
+                                   "VERSION"_V,
+                                   target) });
+  }
+
+  auto collect_packages_to_include(PackageIdentifier const& owner_ident)
+  {
+    return interpreter.query(
+      std::array{ "IncludeHeaders"_p(owner_ident.org(),
+                                     owner_ident.name(),
+                                     std::format("{}", owner_ident.version()),
+                                     owner_ident.target().to_string(),
+                                     "ORG"_V,
+                                     "NAME"_V,
+                                     "VERSION"_V,
+                                     "TARGET"_V) });
+  }
 
   /*
     repeat_dependency_siblings
@@ -47,8 +96,171 @@ struct DeptreeCtx
     , exists_extern(interpreter.predicate("ExistsExternalDependency", 0))
     , dependency_cycle(interpreter.predicate("DependencyCycle", 0))
     , extern_chain(interpreter.predicate("ExternalDependencyChain", 8))
+    , static_domain(interpreter.predicate("StaticDomain", 8))
+    , dynamic_dependency(interpreter.predicate("DynamicDependency", 8))
+    , include_headers(interpreter.predicate("IncludeHeaders", 8))
   {
     using namespace datalogpp;
+
+    static_domain("HEAD_ORG"_V,
+                  "HEAD_NAME"_V,
+                  "HEAD_VERSION"_V,
+                  "HEAD_TARGET"_V,
+                  "CHILD_ORG"_V,
+                  "CHILD_NAME"_V,
+                  "CHILD_VERSION"_V,
+                  "CHILD_TARGET"_V) =
+      "Dependency"_p("HEAD_ORG"_V,
+                     "HEAD_NAME"_V,
+                     "HEAD_VERSION"_V,
+                     "HEAD_TARGET"_V,
+                     "CHILD_ORG"_V,
+                     "CHILD_NAME"_V,
+                     "CHILD_VERSION"_V,
+                     "CHILD_TARGET"_V,
+                     "_"_V,
+                     "_"_V) +
+      "Package"_p("CHILD_ORG"_V,
+                  "CHILD_NAME"_V,
+                  "CHILD_VERSION"_V,
+                  "CHILD_TARGET"_V,
+                  "CHILD_TYPE"_V) +
+      /* static domains end at dynlibs and executables */
+      Inequality("CHILD_TYPE"_V, "dynlib") +
+      Inequality("CHILD_TYPE"_V, "executable");
+
+    static_domain("HEAD_ORG"_V,
+                  "HEAD_NAME"_V,
+                  "HEAD_VERSION"_V,
+                  "HEAD_TARGET"_V,
+                  "CHILD_ORG"_V,
+                  "CHILD_NAME"_V,
+                  "CHILD_VERSION"_V,
+                  "CHILD_TARGET"_V) =
+      "StaticDomain"_p("HEAD_ORG"_V,
+                       "HEAD_NAME"_V,
+                       "HEAD_VERSION"_V,
+                       "HEAD_TARGET"_V,
+                       "INTER_ORG"_V,
+                       "INTER_NAME"_V,
+                       "INTER_VERISON"_V,
+                       "INTER_TARGET"_V) +
+      "Dependency"_p("INTER_ORG"_V,
+                     "INTER_NAME"_V,
+                     "INTER_VERSION"_V,
+                     "INTER_TARGET"_V,
+                     "CHILD_ORG"_V,
+                     "CHILD_NAME"_V,
+                     "CHILD_VERSION"_V,
+                     "CHILD_TARGET"_V,
+                     "_"_V,
+                     "_"_V) +
+      "Package"_p("CHILD_ORG"_V,
+                  "CHILD_NAME"_V,
+                  "CHILD_VERSION"_V,
+                  "CHILD_TARGET"_V,
+                  "CHILD_TYPE"_V) +
+      /* static domains end at dynlibs and executables */
+      Inequality("CHILD_TYPE"_V, "dynlib") +
+      Inequality("CHILD_TYPE"_V, "executable");
+
+    /* a dynamic dependency is a link between static domains */
+    dynamic_dependency("HEAD_ORG"_V,
+                       "HEAD_NAME"_V,
+                       "HEAD_VERSION"_V,
+                       "HEAD_TARGET"_V,
+                       "CHILD_ORG"_V,
+                       "CHILD_NAME"_V,
+                       "CHILD_VERSION"_V,
+                       "CHILD_TARGET"_V) = "StaticDomain"_p("HEAD_ORG"_V,
+                                                            "HEAD_NAME"_V,
+                                                            "HEAD_VERSION"_V,
+                                                            "HEAD_TARGET"_V,
+                                                            "INTER_ORG"_V,
+                                                            "INTER_NAME"_V,
+                                                            "INTER_VERSION"_V,
+                                                            "INTER_TARGET"_V) +
+                                           "Dependency"_p("INTER_ORG"_V,
+                                                          "INTER_NAME"_V,
+                                                          "INTER_VERSION"_V,
+                                                          "INTER_TARGET"_V,
+                                                          "CHILD_ORG"_V,
+                                                          "CHILD_NAME"_V,
+                                                          "CHILD_VERSION"_V,
+                                                          "CHILD_TARGET"_V,
+                                                          "_"_V,
+                                                          "_"_V) +
+                                           "Package"_p("CHILD_ORG"_V,
+                                                       "CHILD_NAME"_V,
+                                                       "CHILD_VERSION"_V,
+                                                       "CHILD_TARGET"_V,
+                                                       "dynlib"_V);
+    dynamic_dependency("HEAD_ORG"_V,
+                       "HEAD_NAME"_V,
+                       "HEAD_VERSION"_V,
+                       "HEAD_TARGET"_V,
+                       "CHILD_ORG"_V,
+                       "CHILD_NAME"_V,
+                       "CHILD_VERSION"_V,
+                       "CHILD_TARGET"_V) = "Dependency"_p("HEAD_ORG"_V,
+                                                          "HEAD_NAME"_V,
+                                                          "HEAD_VERSION"_V,
+                                                          "HEAD_TARGET"_V,
+                                                          "CHILD_ORG"_V,
+                                                          "CHILD_NAME"_V,
+                                                          "CHILD_VERSION"_V,
+                                                          "CHILD_TARGET"_V,
+                                                          "_"_V,
+                                                          "_"_V) +
+                                           "Package"_p("CHILD_ORG"_V,
+                                                       "CHILD_NAME"_V,
+                                                       "CHILD_VERSION"_V,
+                                                       "CHILD_TARGET"_V,
+                                                       "dynlib"_V);
+
+    include_headers("HEAD_ORG"_V,
+                    "HEAD_NAME"_V,
+                    "HEAD_VERSION"_V,
+                    "HEAD_TARGET"_V,
+                    "CHILD_ORG"_V,
+                    "CHILD_NAME"_V,
+                    "CHILD_VERSION"_V,
+                    "CHILD_TARGET"_V) = "Dependency"_p("HEAD_ORG"_V,
+                                                       "HEAD_NAME"_V,
+                                                       "HEAD_VERSION"_V,
+                                                       "HEAD_TARGET"_V,
+                                                       "CHILD_ORG"_V,
+                                                       "CHILD_NAME"_V,
+                                                       "CHILD_VERSION"_V,
+                                                       "CHILD_TARGET"_V,
+                                                       "_"_V,
+                                                       "_"_V);
+
+    include_headers("HEAD_ORG"_V,
+                    "HEAD_NAME"_V,
+                    "HEAD_VERSION"_V,
+                    "HEAD_TARGET"_V,
+                    "CHILD_ORG"_V,
+                    "CHILD_NAME"_V,
+                    "CHILD_VERSION"_V,
+                    "CHILD_TARGET"_V) = "IncludeHeaders"_p("HEAD_ORG"_V,
+                                                           "HEAD_NAME"_V,
+                                                           "HEAD_VERSION"_V,
+                                                           "HEAD_TARGET"_V,
+                                                           "INTER_ORG"_V,
+                                                           "INTER_NAME"_V,
+                                                           "INTER_VERSION"_V,
+                                                           "INTER_TARGET"_V) +
+                                        "Dependency"_p("INTER_ORG"_V,
+                                                       "INTER_NAME"_V,
+                                                       "INTER_VERSION"_V,
+                                                       "INTER_TARGET"_V,
+                                                       "CHILD_ORG"_V,
+                                                       "CHILD_NAME"_V,
+                                                       "CHILD_VERSION"_V,
+                                                       "CHILD_TARGET"_V,
+                                                       "_"_V,
+                                                       "external");
 
     repeat_dependency_siblings() = "Dependency"_p("ORG"_V,
                                                   "NAME"_V,
@@ -74,7 +286,7 @@ struct DeptreeCtx
                                    Inequality("D_TARGET"_V, "C_TARGET"_V);
 
     static_to_static_deps() =
-      "Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "static") +
+      "Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "library") +
       "Dependency"_p("ORG"_V,
                      "NAME"_V,
                      "VERSION"_V,
@@ -85,7 +297,8 @@ struct DeptreeCtx
                      "C_TARGET"_V,
                      "_"_V,
                      "_"_V) +
-      "Package"_p("C_ORG"_V, "C_NAME"_V, "C_VERSION"_V, "C_TARGET"_V, "static");
+      "Package"_p(
+        "C_ORG"_V, "C_NAME"_V, "C_VERSION"_V, "C_TARGET"_V, "library");
 
     exists_extern() = "Dependency"_p("_"_V,
                                      "_"_V,
@@ -192,32 +405,6 @@ struct DeptreeCtx
                                                 "C_TARGET"_V,
                                                 "_"_V,
                                                 "external"_V);
-
-    // package("crow", "scl", "0.3.0", "x86-linux-gnu", "static") = {};
-    // package("crow", "lexible", "0.4.0", "x86-linux-gnu", "static") = {};
-    // package("crow", "bar", "0.2.0", "x86-linux-gnu", "static") = {};
-
-    // dependency("crow",
-    //            "scl",
-    //            "0.3.0",
-    //            "x86-linux-gnu",
-    //            "crow",
-    //            "lexible",
-    //            "0.4.0",
-    //            "x86-linux-gnu",
-    //            ">",
-    //            "external") = {};
-
-    // dependency("crow",
-    //            "lexible",
-    //            "0.4.0",
-    //            "x86-linux-gnu",
-    //            "crow",
-    //            "bar",
-    //            "0.2.0",
-    //            "x86-linux-gnu",
-    //            ">",
-    //            "external") = {};
 
     interpreter.infer();
   };
@@ -380,26 +567,25 @@ build_dependency_tree(ConfigurationFile const& config,
     /*
       simple, easy to rule out stuff
     */
-
-    if (ctx->interpreter.query(std::array{ "StaticToStaticDependencies"_p() })
-          .size() != 0)
-      throw std::runtime_error(
-        "static to static dependencies are currently not allowed by hewg");
-
-    // sibling dependencies that which share the same org and name,
-    // perhaps differing in version are disallowed
-    if (ctx->interpreter.query(std::array{ "RepeatDependencySiblings"_p() })
-          .size() != 0)
-      throw std::runtime_error(
-        "a dependency is repeated as a sibling somewhere in the tree");
-
-    if (ctx->interpreter.query(std::array{ "ExistsExternalDependency"_p() })
-          .size() != 0)
-      throw std::runtime_error(
-        "external dependencies are currently not allowed by hewg");
-
     if (ctx->interpreter.query(std::array{ "DependencyCycle"_p() }).size() != 0)
       throw std::runtime_error("loop detected in package depedency graph");
+  }
+
+  {
+    for (auto const& subst :
+         ctx->collect_static_domain(this_package_identifier)) {
+      auto const versions =
+        ctx->collect_packages_by_name_in_static_domain(this_package_identifier,
+                                                       subst.at("ORG"_V),
+                                                       subst.at("NAME"_V),
+                                                       subst.at("TARGET"_V));
+
+      if (versions.size() > 1)
+        throw std::runtime_error(
+          std::format("multiple versions specified for a dependency {}.{}",
+                      subst.at("ORG"_V),
+                      subst.at("NAME"_V)));
+    }
   }
 
   {
@@ -408,26 +594,17 @@ build_dependency_tree(ConfigurationFile const& config,
     */
 
     /*
-      NOTE:
-        currently, shared libraries are unsupported
-        re-exportation is also unsupported
-        therefore, there are very few checks we need to make
+     * check that for each and every package, there is either
+     * only compatable = checks, all >=, or >= with compatable =
+     */
 
-      TODO:
-        * forbid >= versions on major version 0 semver
-    */
+    using DepgraphPackage =
+      std::tuple<std::string, std::string, std::string, std::string>;
+
+    std::set<DepgraphPackage> static_domain_heads;
 
     auto const packages = ctx->interpreter.query(std::array{
       "Package"_p("ORG"_V, "NAME"_V, "VERSION"_V, "TARGET"_V, "_"_V) });
-
-    // auto const equal_versions = ctx->interpreter.query(std::array{
-    //   "Dependency"_p(
-    //     "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "_"_V, "=", "_"_V),
-    // });
-
-    // if (equal_versions.size() != 0)
-    //   throw std::runtime_error(
-    //     "equal dependency versions are currently not allowed by hewg");
 
     auto const greater_versions = ctx->interpreter.query(std::array{
       "Dependency"_p("_"_V,
@@ -458,8 +635,6 @@ build_dependency_tree(ConfigurationFile const& config,
   /*
    * no >= versions applied on maj ver 0
    * no shared libraries allowed
-   * no re-exportation allowed
-   * no static->static allowed
    */
 
   return ctx;
@@ -467,71 +642,32 @@ build_dependency_tree(ConfigurationFile const& config,
 
 std::set<PackageIdentifier>
 collect_packages_to_include(ConfigurationFile const& config,
-                            PackageCacheDB const& db,
+                            PackageCacheDB const&,
                             TargetTriplet const& this_target,
                             Deptree const& tree)
 {
   auto const this_package_identifier =
     get_this_package_ident(config, this_target);
 
-  // auto const this_package_header_deps = ctx->interpreter.query(std::array{
-  //   "Dependency"_p(this_package_identifier.org(),
-  //                  this_package_identifier.name(),
-  //                  std::format("{}", this_package_identifier.version()),
-  //                  this_package_identifier.target().to_string(),
-  //                  "CHILD_ORG"_V,
-  //                  "CHILD_NAME"_V,
-  //                  "CHILD_VERSION"_V,
-  //                  "CHILD_TARGET"_V,
-  //                  "DEPENDS"_V,
-  //                  "EXT"_V),
-  //   "Package"_p("CHILD_ORG"_V,
-  //               "CHILD_NAME"_V,
-  //               "CHILD_VERSION"_V,
-  //               "CHILD_TARGET"_V,
-  //               "headers") });
-
-  auto const this_package_deps = tree->interpreter.query(std::array{
-    "Dependency"_p(this_package_identifier.org(),
-                   this_package_identifier.name(),
-                   std::format("{}", this_package_identifier.version()),
-                   this_package_identifier.target().to_string(),
-                   "CHILD_ORG"_V,
-                   "CHILD_NAME"_V,
-                   "CHILD_VERSION"_V,
-                   "CHILD_TARGET"_V,
-                   "DEPENDS"_V,
-                   "EXT"_V) });
-
   std::set<PackageIdentifier> output;
 
-  for (auto const& subst : this_package_deps) {
-    auto const org = subst.at("CHILD_ORG"_V);
-    auto const name = subst.at("CHILD_NAME"_V);
-    auto const version = subst.at("CHILD_VERSION"_V);
-    auto const target = subst.at("CHILD_TARGET"_V);
-    auto const depends = subst.at("DEPENDS"_V);
+  for (auto const& subst :
+       tree->collect_packages_to_include(this_package_identifier)) {
+    auto const org = subst.at("ORG"_V);
+    auto const name = subst.at("NAME"_V);
+    auto const version = subst.at("VERSION"_V);
+    auto const target = subst.at("TARGET"_V);
 
     auto const version_semver = parse_semver(version);
     auto const target_parse = TargetTriplet(target);
-    auto const depends_parse = sort_from_string(depends);
 
     if (not version_semver)
       throw std::runtime_error("malformed semver in package graph");
-    if (not depends_parse)
-      throw std::runtime_error("malformed sort in package graph");
 
     auto const package_ident =
       PackageIdentifier(org, name, *version_semver, target_parse);
 
-    auto const selected_version = select_package_from_dependency_identifier(
-      db, DependencyIdentifier(*depends_parse, package_ident));
-
-    if (not selected_version)
-      throw std::runtime_error(std::format(
-        "unable to select valid version for package {}", package_ident));
-
-    output.insert(*selected_version);
+    output.insert(package_ident);
   }
 
   return output;
@@ -539,60 +675,39 @@ collect_packages_to_include(ConfigurationFile const& config,
 
 std::set<PackageIdentifier>
 collect_packages_to_link(ConfigurationFile const& config,
-                         PackageCacheDB const& db,
+                         PackageCacheDB const&,
                          TargetTriplet const& this_target,
                          Deptree const& tree)
 {
   auto const this_package_identifier =
     get_this_package_ident(config, this_target);
 
-  auto const this_package_static_dependencies =
-    tree->interpreter.query(std::array{
-      "Dependency"_p(this_package_identifier.org(),
-                     this_package_identifier.name(),
-                     std::format("{}", this_package_identifier.version()),
-                     this_package_identifier.target().to_string(),
-                     "CHILD_ORG"_V,
-                     "CHILD_NAME"_V,
-                     "CHILD_VERSION"_V,
-                     "CHILD_TARGET"_V,
-                     "DEPENDS"_V,
-                     "EXT"_V),
-      "Package"_p("CHILD_ORG"_V,
-                  "CHILD_NAME"_V,
-                  "CHILD_VERSION"_V,
-                  "CHILD_TARGET"_V,
-                  "library") });
-
   std::set<PackageIdentifier> output;
 
-  for (auto const& subst : this_package_static_dependencies) {
-    auto const org = subst.at("CHILD_ORG"_V);
-    auto const name = subst.at("CHILD_NAME"_V);
-    auto const version = subst.at("CHILD_VERSION"_V);
-    auto const target = subst.at("CHILD_TARGET"_V);
-    auto const depends = subst.at("DEPENDS"_V);
+  for (auto const& subst :
+       tree->collect_static_domain(this_package_identifier)) {
+    auto const org = subst.at("ORG"_V);
+    auto const name = subst.at("NAME"_V);
+    auto const version = subst.at("VERSION"_V);
+    auto const target = subst.at("TARGET"_V);
+
+    auto const package_query = tree->interpreter.query(
+      std::array{ "Package"_p(org, name, version, target, "TYPE"_V) });
+
+    /* dont want to link headers */
+    if (package_query.front().at("TYPE"_V) == "headers")
+      continue;
 
     auto const version_semver = parse_semver(version);
     auto const target_parse = TargetTriplet(target);
-    auto const depends_parse = sort_from_string(depends);
 
     if (not version_semver)
       throw std::runtime_error("malformed semver in package graph");
-    if (not depends_parse)
-      throw std::runtime_error("malformed sort in package graph");
 
     auto const package_ident =
       PackageIdentifier(org, name, *version_semver, target_parse);
 
-    auto const selected_version = select_package_from_dependency_identifier(
-      db, DependencyIdentifier(*depends_parse, package_ident));
-
-    if (not selected_version)
-      throw std::runtime_error(std::format(
-        "unable to select valid version for package {}", package_ident));
-
-    output.insert(*selected_version);
+    output.insert(package_ident);
   }
 
   return output;

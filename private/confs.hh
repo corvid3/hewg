@@ -73,6 +73,7 @@ struct ProjectConf
                jayson::obj_field<"authors", &ProjectConf::authors>>;
 };
 
+/* for target/release-dependent build flags/sources, see confs.cc */
 struct CXXConf
 {
   std::optional<int> std;

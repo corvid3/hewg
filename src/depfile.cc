@@ -14,21 +14,11 @@ enum class TokenType
   Backslash,
 };
 
-constexpr std::string_view skip_regex = R"(\s+)";
-
-// parser doesn't need to be very robust,
-// we verify the filepaths are ok afterwards
-constexpr std::string_view identifier_regex =
-  R"(([a-zA-Z0-9_\-\.\/]|\\ |:(?! ))+)";
-constexpr std::string_view colon_regex = ":";
-constexpr std::string_view backslash_regex = R"(\\)";
-
-using skip_morpheme = lexible::morpheme<skip_regex, TokenType::Skip, 0>;
-using identifier_morpheme =
-  lexible::morpheme<identifier_regex, TokenType::Identifier, 1>;
-using colon_morpheme = lexible::morpheme<colon_regex, TokenType::Colon, 1>;
-using backslash_morpheme =
-  lexible::morpheme<backslash_regex, TokenType::Backslash, 2>;
+using skip_morpheme = lexible::morpheme<R"(\s+)", TokenType::Skip, 0>;
+using identifier_morpheme = lexible::
+  morpheme<R"(([a-zA-Z0-9_\-\.\/]|\\ |:(?! ))+)", TokenType::Identifier, 1>;
+using colon_morpheme = lexible::morpheme<":", TokenType::Colon, 1>;
+using backslash_morpheme = lexible::morpheme<R"(\\)", TokenType::Backslash, 2>;
 
 using lexer = lexible::lexer<TokenType,
                              skip_morpheme,

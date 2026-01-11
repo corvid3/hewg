@@ -10,3 +10,7 @@ install(ConfigurationFile const& config,
         PackageCacheDB& db,
         TargetTriplet target,
         BuildOptions const& options);
+
+void
+select_executable(PackageCacheDB const& db,
+                  PackageIdentifier const package_ident);

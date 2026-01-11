@@ -62,13 +62,14 @@ create_scl_file(std::string_view org,
                 std::string_view type)
 {
   // wow the stdlib regex blows
-  auto&& a = std::regex_replace(
-    scl_template, hewg_version_regex, std::format("\"{}\"", this_hewg_version));
-  auto&& b = std::regex_replace(a, org_regex, std::string(org));
-  auto&& c = std::regex_replace(b, name_regex, std::string(name));
-  auto&& d = std::regex_replace(c, project_type_regex, std::string(type));
+  std::string str;
+  str = std::regex_replace(
+    scl_template, hewg_version_regex, std::format("{}", this_hewg_version));
+  str = std::regex_replace(str, project_type_regex, std::string(type));
+  str = std::regex_replace(str, org_regex, std::string(org));
+  str = std::regex_replace(str, name_regex, std::string(name));
 
-  return d;
+  return str;
 }
 
 static void
@@ -137,25 +138,22 @@ init(InitOptions const& options, std::span<std::string const> bares)
   switch (*project_type) {
     case PackageType::Executable: {
       auto const file =
-        create_scl_file(std::string(project_name), "executable", "");
+        create_scl_file(project_org, project_name, "executable");
       std::ofstream(install_directory / "hewg.scl") << file;
     } break;
 
     case PackageType::StaticLibrary: {
-      auto const file =
-        create_scl_file(std::string(project_name), "library", "");
+      auto const file = create_scl_file(project_org, project_name, "library");
       std::ofstream(install_directory / "hewg.scl") << file;
     } break;
 
     case PackageType::SharedLibrary: {
-      auto const file =
-        create_scl_file(std::string(project_name), "dynlib", "");
+      auto const file = create_scl_file(project_org, project_name, "dynlib");
       std::ofstream(install_directory / "hewg.scl") << file;
     } break;
 
     case PackageType::Headers: {
-      auto const file =
-        create_scl_file(std::string(project_name), "headers", "");
+      auto const file = create_scl_file(project_org, project_name, "headers");
       std::ofstream(install_directory / "hewg.scl") << file;
     } break;
   }

@@ -78,7 +78,7 @@ struct BuildOptions : terse::TerminalSubcommand
                   &BuildOptions::target>>;
 };
 
-struct TestAllOptions : terse::NonterminalSubcommand
+struct TestAllOptions : terse::TerminalSubcommand
 {
   constexpr static auto name = "all";
   constexpr static auto usage = "hewg test all";
@@ -88,7 +88,7 @@ struct TestAllOptions : terse::NonterminalSubcommand
   using options = std::tuple<>;
 };
 
-struct TestOptions : terse::TerminalSubcommand
+struct TestOptions : terse::NonterminalSubcommand
 {
   constexpr static auto name = "test";
   constexpr static auto usage = "hewg test all";
@@ -98,6 +98,33 @@ struct TestOptions : terse::TerminalSubcommand
 
   using options = std::tuple<>;
   using subcommands = std::tuple<>;
+};
+
+struct PackageSelectOptions : terse::TerminalSubcommand
+{
+  constexpr static auto name = "select";
+  constexpr static auto usage = "hewg packge select <package> <version>";
+  constexpr static auto short_description =
+    "update package link to point to a specific version";
+  constexpr static auto description =
+    "updates a link within the users path such that the link points to a "
+    "specified version of an installed hewg package";
+
+  using options = std::tuple<>;
+};
+
+struct PackageOptions : terse::NonterminalSubcommand
+{
+  constexpr static auto name = "package";
+  constexpr static auto usage = "hewg package <subcommand>";
+  constexpr static auto short_description =
+    "interact with the installed hewg packages";
+  constexpr static auto description =
+    "interact with installed hewg packages to either uninstall, select, list, "
+    "or otherwise manage";
+
+  using options = std::tuple<>;
+  using subcommands = std::tuple<PackageSelectOptions>;
 };
 
 struct ToplevelOptions : terse::NonterminalSubcommand
@@ -146,8 +173,8 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   "prints the version of hewg",
                   &ToplevelOptions::print_version>>;
 
-  using subcommands =
-    std::tuple<BuildOptions, CleanOptions, InitOptions, TestOptions>;
+  using subcommands = std::
+    tuple<BuildOptions, CleanOptions, InitOptions, TestOptions, PackageOptions>;
 };
 
 decltype(terse::execute<ToplevelOptions>({}, {}))

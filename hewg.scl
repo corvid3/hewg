@@ -3,7 +3,7 @@ version = "0.4.0-alpha"
 type = "executable"
 
 [project]
-version = "0.4.0-alpha.nd"
+version = "0.4.0-alpha"
 org = "crow"
 name = "hewg"
 description = "compiler build system and management software"

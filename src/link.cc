@@ -1,4 +1,3 @@
-
 #include "analysis.hh"
 #include "cmdline.hh"
 #include "common.hh"
@@ -139,11 +138,7 @@ shared_link(ConfigurationFile const& config,
   std::vector<std::string> args =
     generate_link_flags(config, target, options.release, object_files, outfile);
 
-  // ignore static libraries here
-  // and defer their linking by adding them to the
-  // descriptor of the package file
   append_vec(args, get_library_flags(config, target, db, deptree, true));
-
   args.push_back("-shared");
 
   run_command(target.cxx, args);

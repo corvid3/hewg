@@ -2,7 +2,9 @@
 
 #include <crow.jayson/jayson.hh>
 #include <crow.scl/scl.hh>
+#include <filesystem>
 #include <format>
+#include <functional>
 #include <string>
 
 #include "cmdline.hh"
@@ -65,7 +67,9 @@ struct TargetFile
 };
 
 ConfigurationFile
-get_config_file(ToplevelOptions const&, std::filesystem::path path);
+get_config_file(ToplevelOptions const&,
+                std::optional<std::reference_wrapper<TargetTriplet const>>,
+                std::filesystem::path path);
 
 TargetFile
 get_target_file(TargetTriplet const target_name);

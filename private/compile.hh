@@ -7,6 +7,7 @@
 #include "common.hh"
 #include "confs.hh"
 #include "packages.hh"
+#include "srcrelatives.hh"
 #include "target.hh"
 #include "thread_pool.hh"
 

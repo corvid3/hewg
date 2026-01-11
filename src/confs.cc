@@ -1,6 +1,7 @@
 #include <crow.jayson/jayson.hh>
 #include <crow.scl/scl.hh>
 #include <filesystem>
+#include <format>
 #include <optional>
 
 #include "analysis.hh"
@@ -9,6 +10,25 @@
 #include "confs.hh"
 #include "paths.hh"
 #include "semver.hh"
+
+/* target dependent configuration tables */
+struct CXXTargetConf
+{
+  /* added to the main source listing */
+  std::vector<std::string> source_files;
+
+  using scl_fields =
+    std::tuple<scl::field<&CXXTargetConf::source_files, "sources">>;
+};
+
+struct CTargetConf
+{
+  /* added to the main source listing */
+  std::vector<std::string> source_files;
+
+  using scl_fields =
+    std::tuple<scl::field<&CTargetConf::source_files, "sources">>;
+};
 
 std::string_view
 project_type_to_string(PackageType const t)
@@ -40,7 +60,10 @@ project_type_from_string(std::string_view s)
 }
 
 ConfigurationFile
-get_config_file(ToplevelOptions const& options, std::filesystem::path path)
+get_config_file(
+  ToplevelOptions const& options,
+  std::optional<std::reference_wrapper<TargetTriplet const>> target_opt,
+  std::filesystem::path path)
 {
   std::string config_filedata = read_file(path);
   scl::file file(config_filedata);
@@ -72,8 +95,32 @@ get_config_file(ToplevelOptions const& options, std::filesystem::path path)
                   "including underscores",
                   name));
 
-  // now we do some jank where we append vectors
-  // depending on the build profile
+  /* get target/release build specific information */
+  if (target_opt) {
+    auto const& target = target_opt->get();
+
+    auto const& cxx_target_table_name =
+      std::format("cxx.target.{}", target.to_string());
+    auto const& c_target_table_name =
+      std::format("c.target.{}", target.to_string());
+
+    if (file.table_exists(cxx_target_table_name)) {
+      CXXTargetConf target_conf;
+      scl::deserialize(target_conf, file, cxx_target_table_name);
+      conf.cxx.sources.insert(conf.cxx.sources.end(),
+                              target_conf.source_files.begin(),
+                              target_conf.source_files.end());
+    }
+
+    if (file.table_exists(c_target_table_name)) {
+      CTargetConf target_conf;
+      scl::deserialize(target_conf, file, c_target_table_name);
+      conf.c.sources.insert(conf.c.sources.end(),
+                            target_conf.source_files.begin(),
+                            target_conf.source_files.end());
+    }
+  }
+
   return conf;
 }
 

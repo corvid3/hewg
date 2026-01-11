@@ -39,7 +39,7 @@ ensure_user_hewg_directory()
 
 // updates the symlink in .hewg/bin for a given package to point
 // to a specified version-target
-static void
+void
 select_executable(PackageCacheDB const& db,
                   PackageIdentifier const package_ident)
 {
@@ -80,10 +80,42 @@ install_headers(ConfigurationFile const&,
 
   std::filesystem::create_directories(install_dir / "include");
 
+  if (std::filesystem::exists(include_header_dir)) {
+    for (auto const& file :
+         std::filesystem::recursive_directory_iterator(include_header_dir)) {
+      if (std::filesystem::is_regular_file(file)) {
+        std::filesystem::permissions(file,
+                                     std::filesystem::perms::all,
+                                     std::filesystem::perm_options::remove);
+        std::filesystem::permissions(file,
+                                     std::filesystem::perms::owner_write |
+                                       std::filesystem::perms::group_write |
+                                       std::filesystem::perms::others_write,
+                                     std::filesystem::perm_options::add);
+      }
+    }
+  }
+
   std::filesystem::copy(hewg_public_header_directory_path,
                         include_header_dir,
                         std::filesystem::copy_options::recursive |
                           std::filesystem::copy_options::update_existing);
+
+  if (std::filesystem::exists(include_header_dir)) {
+    for (auto const& file :
+         std::filesystem::recursive_directory_iterator(include_header_dir)) {
+      if (std::filesystem::is_regular_file(file)) {
+        std::filesystem::permissions(file,
+                                     std::filesystem::perms::all,
+                                     std::filesystem::perm_options::remove);
+        std::filesystem::permissions(file,
+                                     std::filesystem::perms::owner_read |
+                                       std::filesystem::perms::group_read |
+                                       std::filesystem::perms::others_read,
+                                     std::filesystem::perm_options::add);
+      }
+    }
+  }
 }
 
 static void
