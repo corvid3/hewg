@@ -46,6 +46,9 @@ get_library_flags(ConfigurationFile const& config,
 {
   std::vector<std::string> args;
 
+  for (auto const& sys : config.depends.system_libraries)
+    args.push_back(std::format("-l{}", sys));
+
   auto const links =
     collect_packages_to_link(config, db, target.triplet, deptree);
 
@@ -57,13 +60,6 @@ get_library_flags(ConfigurationFile const& config,
   }
 
   args.push_back("-L/usr/local/lib");
-
-  for (auto const& native_library : config.libs.native)
-    args.push_back(std::format("-l{}", native_library));
-
-  // for (auto const& packaged_library : config.libs.packages) {
-  //   (void)packaged_library;
-  // }
 
   return args;
 }

@@ -17,11 +17,8 @@ internal = {
     "=crow.datalogpp-0.0.1"
     "=crow.terse-0.1.0"
 }
-
 external = { }
-
-[libraries]
-native = { "stdc++exp" }
+system = { "stdc++exp" }
 
 [cxx]
 flags = { "-Wextra" "-Werror" }

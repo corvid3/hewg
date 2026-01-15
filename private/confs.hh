@@ -96,14 +96,6 @@ struct CConf
                                 scl::field<&CConf::sources, "sources">>;
 };
 
-struct LibraryConf
-{
-  std::vector<std::string> native = {};
-
-  using scl_fields =
-    std::tuple<scl::field<&LibraryConf::native, "native", false>>;
-};
-
 struct HooksConf
 {
   std::vector<std::string> once;
@@ -125,10 +117,12 @@ struct DependenciesConf
 {
   std::vector<std::string> internal;
   std::vector<std::string> external;
+  std::vector<std::string> system_libraries;
 
-  using scl_fields =
-    std::tuple<scl::field<&DependenciesConf::internal, "internal">,
-               scl::field<&DependenciesConf::external, "external">>;
+  using scl_fields = std::tuple<
+    scl::field<&DependenciesConf::internal, "internal">,
+    scl::field<&DependenciesConf::external, "external">,
+    scl::field<&DependenciesConf::system_libraries, "system", false>>;
 };
 
 ToolProfile
@@ -144,8 +138,6 @@ struct ConfigurationFile
   CConf c;
   CXXConf cxx;
 
-  LibraryConf libs;
-
   DependenciesConf depends;
 
   HooksConf prebuild_hooks;
@@ -154,7 +146,6 @@ struct ConfigurationFile
   using scl_recurse = std::tuple<
     scl::field<&ConfigurationFile::meta, "hewg">,
     scl::field<&ConfigurationFile::project, "project">,
-    scl::field<&ConfigurationFile::libs, "libraries", false>,
     scl::field<&ConfigurationFile::tools, "tools", false>,
     scl::field<&ConfigurationFile::c, "c">,
     scl::field<&ConfigurationFile::cxx, "cxx">,

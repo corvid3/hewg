@@ -1,5 +1,5 @@
-CXXFLAGS=-I./tmp-include-dir/include -Iinclude -Iprivate -MMD -std=c++23
-CFLAGS=-I./tmp-include-dir/include -Iinclude -Iprivate -MMD 
+CXXFLAGS=-I$(HOME)/.hewg/bootstrap/ -Iinclude -Iprivate -MMD -std=c++23
+CFLAGS=-I$(HOME)/.hewg/bootstrap/ -Iinclude -Iprivate -MMD 
 
 ifdef RELEASE
 CXXFLAGS+=-O2 -g
@@ -8,12 +8,14 @@ CXXFLAGS+=-O0 -g
 endif
 
 LDLIBS=-lscl -ldatalogpp
-LDFLAGS=
+LDFLAGS=-L$(HOME)/.hewg/bootstrap/
 
 SRCS=src/main.cc \
 	src/confs.cc \
 	src/common.cc \
 	src/compile.cc \
+	src/deptree.cc \
+	src/srcrelatives.cc \
 	src/analysis.cc \
 	src/thread_pool.cc \
 	src/build.cc \
@@ -33,19 +35,6 @@ CSRCS=csrc/bootstrap_version.c
 OBJS=$(SRCS:.cc=.o)
 COBJS=$(CSRCS:.c=.o)
 
-init-bootstrap:
-	mkdir -p tmp-include-dir/include/
-	mkdir -p tmp-include-dir/include/crow.scl
-	mkdir -p tmp-include-dir/include/crow.jayson
-	mkdir -p tmp-include-dir/include/crow.lexible
-	mkdir -p tmp-include-dir/include/crow.datalogpp
-	mkdir -p tmp-include-dir/include/crow.terse
-	cp /usr/local/include/scl.hh tmp-include-dir/include/crow.scl
-	cp /usr/local/include/jayson.hh tmp-include-dir/include/crow.jayson
-	cp /usr/local/include/lexible.hh tmp-include-dir/include/crow.lexible
-	cp /usr/local/include/datalogpp.hh tmp-include-dir/include/crow.datalogpp
-	cp /usr/local/include/terse.hh tmp-include-dir/include/crow.terse
-
 clean:
 	rm $(OBJS) 
 
@@ -57,10 +46,4 @@ clean:
 
 bootstrap: $(OBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o bin/hewg
-
-install:
-	sudo cp bin/hewg /usr/local/bin/hewg-bootstrap
-
-uninstall:
-	sudo rm -i /usr/local/bin/hewg-bootstrap
 

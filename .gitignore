@@ -6,6 +6,7 @@
 *.a
 *.d
 
+bootstrap/
 compile_commands.json
 .cache
 local_todo

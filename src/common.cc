@@ -208,7 +208,8 @@ stacktrace_exception::what() const noexcept
 {
   std::stringstream ss;
 
-  auto st = std::stacktrace::current();
+  std::string st = "";
+  // auto st = std::stacktrace::current();
   ss << st << std::endl << m_what << std::endl;
 
   m_fmtBuf = std::move(ss).str();
