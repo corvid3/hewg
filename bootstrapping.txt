@@ -1,27 +1,25 @@
-bootstrapping hewg is a bit of a process, as hewg relies on packages to be installed to be built.
-luckily, the dependencies that hewg relies upon come with bootstrapping scripts to make this easy.
-for each dependency, that is:
-	* crow.scl
-	* crow.jayson
-	* crow.lexible
-	* crow.datalogpp
-	* crow.terse
-(NOTE: all of these may be found at my github)
-clone their respective repositories, and then run the `bootstrap.sh` found within.
+bootstrapping hewg has been made easier.
+simply, run ./bootstrap.sh. the script will pull all required
+libraries and install them to a bootstrapping directory,
+and then run the bootstrapping makefile. 
 
-once this is done, in the root directory of hewg, run 
-	`make init-bootstrap`
-	`make bootstrap -j` 
-	`make install`.
+the bootstrap hewg executable can be found in ./bin/hewg.
 
-once the bootstrapped version of hewg is installed,
-go back to the dependencies and for each run `hewg-bootstrap build --install`.
+then, create ~/.hewg/targets/x86-linux-gnu (or whatever other triplet you're on)
+and update the config with in your toolchain. an example can be found
+at the end of this file.
 
-once all of the dependencies are installed as packages, return to the hewg directory
-and run `hewg-bootstrap build --install`.
+make sure to rebuild the hewg project with the bootstrapped executable
+to get all available features.
 
-if you wish to remove the bootstrapped version of hewg, run 
-	`make uninstall`,
-it will prompt you if you wish to remove the file and ask for a sudo password.
+ex. toolchain:
 
-one may also wish to add `~/.hewg/bin` to their path, if they wish to do so.
+[tools]
+cxx = "x86_64-pc-linux-gnu-c++"
+cc  = "x86_64-pc-linux-gnu-cc"
+ld  = "mold"
+ar  = "ar"
+
+[directories]
+include_dirs = { "/usr/include" "/usr/local/include" }
+lib_dirs = { "/usr/lib" "/usr/local/lib" }

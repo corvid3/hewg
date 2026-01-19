@@ -41,7 +41,7 @@ sources = { }
 
 auto static const gitignore_template = R"(
 .hcache
-.cache
+.cache/
 target/
 compile_commands.json
 )";

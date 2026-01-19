@@ -58,6 +58,7 @@ struct BuildOptions : terse::TerminalSubcommand
   bool help = false;
   bool release = false;
   bool install = false;
+  bool force_debug = false;
   bool gen_compile_commands = false;
   std::optional<std::string> target = std::nullopt;
 
@@ -73,6 +74,11 @@ struct BuildOptions : terse::TerminalSubcommand
                   "changes the build type to release mode, enabling "
                   "all optimizations and stripping",
                   &BuildOptions::release>,
+    terse::Option<"forcedebug",
+                  'd',
+                  "forces a project to be compiled in debug mode, even if the "
+                  "install flag is passed (aka installs the debug version)",
+                  &BuildOptions::force_debug>,
     terse::Option<"install",
                   std::nullopt,
                   "after building, compiles the built project into a package "

@@ -110,6 +110,9 @@ try {
       options.release = true;
     }
 
+    if (options.force_debug)
+      threadsafe_print_verbose("forcing release OFF"), options.release = false;
+
     auto const target_triplet =
       TargetTriplet(options.target.value_or(THIS_TARGET));
     auto const target_file = get_target_file(target_triplet);
