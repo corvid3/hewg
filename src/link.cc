@@ -1,4 +1,5 @@
 #include "analysis.hh"
+#include "app.hh"
 #include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
@@ -15,7 +16,8 @@ namespace
 {
 
 auto
-generate_link_flags(BuildContext const&                    build,
+generate_link_flags(AppContext const&                      ctx,
+                    BuildContext const&                    build,
                     std::span<std::filesystem::path const> object_files,
                     std::filesystem::path const&           outfile)
 {
@@ -31,6 +33,9 @@ generate_link_flags(BuildContext const&                    build,
 
   if (build.target().ld != "ld")
     args.push_back(std::format("-fuse-ld={}", build.target().ld));
+
+  for (auto const& flag : ctx.config().ld.flags)
+    args.push_back(flag);
 
   // if (is_release)
   //   args.push_back("-flto");
@@ -81,7 +86,7 @@ link_executable(AppContext const&                      ctx,
 
   auto const output_filepath = build.emitdir() / ctx.config().project.name;
 
-  auto args = generate_link_flags(build, object_files, output_filepath);
+  auto args = generate_link_flags(ctx, build, object_files, output_filepath);
 
   threadsafe_print("now lets get linking...\n");
   append_vec(args, get_library_flags(ctx, pkg, build));
@@ -129,7 +134,7 @@ shared_link(AppContext const&                      ctx,
   std::filesystem::path const outfile
     = build.emitdir() / std::format("lib{}.so", ctx.config().project.name);
   std::vector<std::string> args
-    = generate_link_flags(build, object_files, outfile);
+    = generate_link_flags(ctx, build, object_files, outfile);
   append_vec(args, get_library_flags(ctx, pkg, build));
   args.emplace_back("-shared");
 

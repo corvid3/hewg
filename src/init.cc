@@ -57,8 +57,6 @@ std::regex const name_regex("%NAME%");
 void
 common_init(std::filesystem::path const& install_directory)
 {
-  std::println("{}", 2);
-
   std::filesystem::create_directory(install_directory / "src");
   std::filesystem::create_directory(install_directory / "csrc");
   std::filesystem::create_directory(install_directory / "include");

@@ -92,6 +92,11 @@ struct CConf {
                                 scl::field<&CConf::sources, "sources">>;
 };
 
+struct LDConf {
+  std::vector<std::string> flags;
+  using scl_fields = std::tuple<scl::field<&LDConf::flags, "flags", false>>;
+};
+
 struct HooksConf {
   std::vector<std::string> once;
   std::vector<std::string> always;
@@ -129,6 +134,7 @@ struct ConfigurationFile {
   // modified with build profile
   CConf   c;
   CXXConf cxx;
+  LDConf  ld;
 
   DependenciesConf depends;
 
@@ -141,6 +147,7 @@ struct ConfigurationFile {
     scl::field<&ConfigurationFile::tools, "tools", false>,
     scl::field<&ConfigurationFile::c, "c">,
     scl::field<&ConfigurationFile::cxx, "cxx">,
+    scl::field<&ConfigurationFile::ld, "ld", false>,
     scl::field<&ConfigurationFile::depends, "depends">,
     scl::field<&ConfigurationFile::prebuild_hooks, "hooks.prebuild", false>,
     scl::field<&ConfigurationFile::postbuild_hooks, "hooks.postbuild", false>>;
