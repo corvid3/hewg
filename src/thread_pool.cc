@@ -1,14 +1,15 @@
+#include "common.hh"
+#include "thread_pool.hh"
+
+#include <array>
 #include <mutex>
 #include <ranges>
 #include <sys/wait.h>
 #include <vector>
 
-#include "common.hh"
-#include "thread_pool.hh"
-
 // thread_local int thread_id = MAIN_THREAD_ID;
 
-ThreadPool::ThreadPool(int const num_threads)
+ThreadPool::ThreadPool(unsigned const num_threads)
 {
   // wrap the entire thing here in
   // a try catch, such that
@@ -25,8 +26,9 @@ ThreadPool::ThreadPool(int const num_threads)
 
           // can only accept if the job queue has something
           // or we're shutting down
-          m_queueCondition.wait(lock,
-                                [&] { return !m_tasks.empty() or m_closing; });
+          m_queueCondition.wait(lock, [&] {
+            return !m_tasks.empty() or m_closing;
+          });
 
           if (m_closing)
             break;
@@ -35,7 +37,7 @@ ThreadPool::ThreadPool(int const num_threads)
           m_tasks.pop();
         }
 
-        (*task.get())();
+        (*task)();
       }
     } catch (std::exception const& e) {
       threadsafe_print(e.what(), '\n');
@@ -43,9 +45,8 @@ ThreadPool::ThreadPool(int const num_threads)
     }
   };
 
-  for (auto const thread_id : std::ranges::iota_view(0, num_threads)) {
-    m_threads.emplace_back(std::thread(thread_dispatch, thread_id));
-  }
+  for (auto const thread_id : std::ranges::iota_view(0U, num_threads))
+    m_threads.emplace_back(thread_dispatch, thread_id);
 }
 
 ThreadPool::~ThreadPool()
@@ -65,41 +66,13 @@ ThreadPool::drain()
     m_tasks.pop();
 }
 
-// void
-// ThreadPool::block_until_finished()
-// {
-//   auto get_next_latch = [&]() -> std::latch& {
-//     std::scoped_lock lock(this->m_mutex);
-//     return this->m_taskLatches.front();
-//   };
-
-//   auto pop_latch = [&]() -> bool {
-//     std::scoped_lock lock(this->m_mutex);
-//     this->m_taskLatches.pop();
-//     return this->m_taskLatches.empty();
-//   };
-
-//   {
-//     std::scoped_lock lock(this->m_mutex);
-//     if (this->m_taskLatches.empty())
-//       return;
-//   }
-
-//   for (;;) {
-//     auto& latch = get_next_latch();
-//     latch.wait();
-//     if (pop_latch())
-//       break;
-//   }
-// }
-
-std::pair<int, std::string>
-run_command(std::string const command, std::span<std::string const> args)
+auto
+run_command(std::string const& command, std::span<std::string const> args)
+  -> std::pair<int, std::string>
 {
   // use pipes to redirect stdout
-  int fds[2];
-
-  if (pipe(fds) != 0)
+  std::array<int, 2> fds{};
+  if (pipe(fds.data()) != 0)
     throw std::runtime_error("error in pipe()");
 
   std::vector<std::string> args_owned(args.begin(), args.end());
@@ -130,8 +103,10 @@ run_command(std::string const command, std::span<std::string const> args)
     throw std::runtime_error("fork failed");
 
   if (pid != 0) {
-    char buf[512];
-    int written = 0;
+    constexpr auto            bufsize    = 512;
+    constexpr auto            max_output = 1_mb;
+    std::array<char, bufsize> buf{};
+    signed long               written = 0;
 
     // have to close this stdout first
     // or else read doesn't hit EOF... for some reason...
@@ -141,7 +116,7 @@ run_command(std::string const command, std::span<std::string const> args)
     std::string stdout_buf;
 
     while (true) {
-      written = read(fds[0], buf, 512);
+      written = read(fds[0], buf.data(), buf.size());
 
       if (written == -1)
         throw std::runtime_error(
@@ -151,9 +126,9 @@ run_command(std::string const command, std::span<std::string const> args)
       if (written == 0)
         break;
 
-      stdout_buf.append(buf, written);
+      stdout_buf.append(buf.data(), written);
 
-      if (stdout_buf.size() > 5_mb)
+      if (stdout_buf.size() > max_output)
         throw std::runtime_error(
           "output of executed command exceeded 5mb of output");
     }
@@ -181,7 +156,7 @@ run_command(std::string const command, std::span<std::string const> args)
   close(fds[1]);
 
   // actually run the command
-  auto const e = execvp(command.c_str(), (char* const*)args_owned_ptrs.data());
+  auto const e = execvp(command.c_str(), (char* const*) args_owned_ptrs.data());
 
   if (e == -1)
     throw std::runtime_error("unable to run command");

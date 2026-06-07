@@ -1,7 +1,11 @@
 #pragma once
 
+#include "semver.hh"
+#include "thread_pool.hh"
+
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <compare>
 #include <concepts>
@@ -11,6 +15,7 @@
 #include <iterator>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -18,60 +23,75 @@
 #include <utility>
 #include <vector>
 
-#include "semver.hh"
-#include "thread_pool.hh"
-
 using namespace std::string_view_literals;
 
 using version_triplet = std::tuple<int, int, int>;
 
-extern "C" int __hewg_version_package_hewg[3];
-extern "C" char const* __hewg_prerelease_package_hewg;
-extern "C" char const* __hewg_metadata_package_hewg;
-extern "C" long __hewg_build_date_package_hewg;
+extern "C" int         _hewg_version_package_hewg[3];
+extern "C" char const* _hewg_prerelease_package_hewg;
+extern "C" char const* _hewg_metadata_package_hewg;
+extern "C" long        _hewg_build_date_package_hewg;
 
-SemVer const inline this_hewg_version{ 0, 4, 0, "alpha", std::nullopt };
+inline auto
+nullptr_to_opt(char const* in) -> std::optional<char const*>
+{
+  if (in == nullptr)
+    return std::nullopt;
+  return in;
+}
+
+inline SemVer const this_hewg_version{
+  _hewg_version_package_hewg[0],
+  _hewg_version_package_hewg[1],
+  _hewg_version_package_hewg[2],
+  nullptr_to_opt(_hewg_prerelease_package_hewg),
+  nullptr_to_opt(_hewg_metadata_package_hewg)
+};
 
 template<typename T>
 class atomic_vec
 {
-  std::vector<T> m_vec;
+  std::vector<T>     m_vec;
   mutable std::mutex m_mutex;
 
 public:
   atomic_vec() = default;
 
   template<typename M>
-  void push_back(M&& what)
+  void
+  push_back(M&& what)
   {
     std::scoped_lock lock(m_mutex);
-    m_vec.push_back(what);
+    m_vec.push_back(std::forward(what));
   }
 
-  void map(auto func)
+  void
+  map(auto func)
   {
     std::scoped_lock lock(m_mutex);
     for (auto& v : m_vec)
       func(v);
   }
 
-  void clear()
+  void
+  clear()
   {
     std::scoped_lock lock(m_mutex);
     m_vec.clear();
   }
 
-  auto size() const
+  auto
+  size() const
   {
     std::scoped_lock lock(m_mutex);
     return m_vec.size();
   }
 };
 
-std::strong_ordering compare_ascii(std::string_view, std::string_view);
+auto compare_ascii(std::string_view, std::string_view) -> std::strong_ordering;
 
-std::vector<std::string_view>
-split_by_delim(std::string_view const, char const delim);
+auto
+split_by_delim(std::string_view, char delim) -> std::vector<std::string_view>;
 
 template<typename T, std::convertible_to<T>... As>
 auto
@@ -80,20 +100,22 @@ make_array(As const&... vals) -> std::array<T, sizeof...(As)>
   return std::array{ T(vals)... };
 }
 
-constexpr std::size_t
-operator""_kb(unsigned long long const in)
+constexpr auto
+operator""_kb(unsigned long long const in) -> std::size_t
 {
-  return in * 1024;
+  constexpr auto kibi = 1024;
+  return in * kibi;
 }
 
-constexpr std::size_t
-operator""_mb(unsigned long long const in)
+constexpr auto
+operator""_mb(unsigned long long const in) -> std::size_t
 {
-  return in * 1024_kb;
+  constexpr auto mibi = 1024_kb;
+  return in * mibi;
 }
 
 template<typename L>
-auto&
+auto
 append_vec(std::vector<L>& into, std::ranges::range auto const& rhs)
 {
   into.insert(into.end(), rhs.begin(), rhs.end());
@@ -101,17 +123,19 @@ append_vec(std::vector<L>& into, std::ranges::range auto const& rhs)
 }
 
 template<typename L>
-decltype(auto)
-operator+(std::vector<L>&& lhs, std::vector<L>&& rhs)
+auto
+operator+(std::vector<L>&& lhs, std::vector<L> rhs) -> decltype(auto)
 {
   lhs.insert(
     lhs.end(), std::move_iterator(rhs.begin()), std::move_iterator(rhs.end()));
+  rhs.clear();
   return std::move(lhs);
 }
 
 template<typename L>
-decltype(auto)
+auto
 operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
+  -> decltype(auto)
 {
   std::vector<L> out = lhs;
   out.insert(out.end(), rhs.begin(), rhs.end());
@@ -121,12 +145,13 @@ operator+(std::vector<L> const& lhs, std::vector<L> const& rhs)
 class stacktrace_exception : public std::exception
 {
 public:
-  stacktrace_exception(std::string_view what);
+  explicit stacktrace_exception(std::string_view what);
 
-  virtual char const* what() const noexcept override;
+  auto
+  what() const noexcept -> char const* override;
 
 private:
-  std::string m_what;
+  std::string         m_what;
   mutable std::string m_fmtBuf;
 };
 
@@ -141,37 +166,39 @@ inline std::mutex stdout_mutex;
 
 // full saturation
 // 0 -> 360
-std::tuple<int, int, int>
-hsv_to_rgb(float const degrees);
+auto
+hsv_to_rgb(double) -> std::tuple<int, int, int>;
 
-inline std::string
-hsv_terminal_colorize(float pct)
+inline auto
+hsv_terminal_colorize(double pct) -> std::string
 {
-  auto [r, g, b] = hsv_to_rgb(300. * pct);
-  r = std::min(255, r + 50);
-  g = std::min(255, g + 50);
-  b = std::min(255, b + 50);
+  constexpr auto brightening  = 50;
+  constexpr auto degree_range = 300;
+  auto [r, g, b]              = hsv_to_rgb(degree_range * pct);
+  r                           = std::min(CHAR_MAX, r + brightening);
+  g                           = std::min(CHAR_MAX, g + brightening);
+  b                           = std::min(CHAR_MAX, b + brightening);
 
   return std::format("\x1b[38;2;{};{};{}m",
-                     (unsigned char)r,
-                     (unsigned char)g,
-                     (unsigned char)b);
+                     (unsigned char) r,
+                     (unsigned char) g,
+                     (unsigned char) b);
 };
 
-inline std::string
-greyscale_terminal_colorize(float const pct)
+inline auto
+greyscale_terminal_colorize(double const pct) -> std::string
 {
-  int const val = std::min<int>(255, 255 * pct);
+  int const val = std::min<int>(CHAR_MAX, CHAR_MAX * pct);
   return std::format("\x1b[38;2;{};{};{}m", val, val, val);
 }
 
-inline std::string
-get_color_by_thread_id()
+inline auto
+get_color_by_thread_id() -> std::string
 {
   if (thread_id == MAIN_THREAD_ID)
     return "\x1b[39;49m";
 
-  float const pct = (thread_id) / (float)num_tasks;
+  double const pct = (double) (thread_id) / (double) num_tasks;
   return hsv_terminal_colorize(pct);
 }
 
@@ -191,15 +218,17 @@ threadsafe_print(auto const&... v)
   else
     thread_fmt = "(hewg)";
 
-  std::scoped_lock lock(stdout_mutex);
-  std::cout << std::format(
-    "{}{:13}\x1b[39;49m| ", get_color_by_thread_id(), thread_fmt);
+  std::unique_lock lock(stdout_mutex);
+  auto const       color = get_color_by_thread_id();
+  std::cout << std::format("{}{:13}\x1b[39;49m| ", color, thread_fmt);
 
   std::cout << s;
 
   // just make sure theres a line ending
   if (not s.ends_with('\n'))
     std::cout << '\n';
+
+  lock.unlock();
 }
 
 // this is set to true in main()
@@ -215,8 +244,8 @@ threadsafe_print_verbose(auto const&... v)
   threadsafe_print(v...);
 }
 
-inline std::string
-read_file(std::filesystem::path const p)
+inline auto
+read_file(std::filesystem::path const& p) -> std::string
 {
   std::ifstream f(p);
   if (f.fail())
@@ -225,15 +254,15 @@ read_file(std::filesystem::path const p)
   return (std::stringstream() << f.rdbuf()).str();
 }
 
-bool
-is_subpathed_by(std::filesystem::path const owning_directory,
-                std::filesystem::path const child);
+auto
+is_subpathed_by(std::filesystem::path const& owning_directory,
+                std::filesystem::path const& child) -> bool;
 
 void
-create_directory_checked(std::filesystem::path const what);
+create_directory_checked(std::filesystem::path const& what);
 
-std::filesystem::path const&
-get_home_directory();
+auto
+get_home_directory() -> std::filesystem::path const&;
 
 inline bool skip_countdown = false;
 
@@ -241,9 +270,9 @@ inline bool skip_countdown = false;
 // on the terminal with time
 // use this whenever you're deleting files, probably
 void
-do_terminal_countdown(int const num);
+do_terminal_countdown(int num);
 
 // used for project name
 // regex: [a-zA-Z0-9_]+
-bool
-check_valid_project_identifier(std::string_view what);
+auto
+check_valid_project_identifier(std::string_view name) -> bool;

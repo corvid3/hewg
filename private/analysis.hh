@@ -4,19 +4,17 @@
   analysis for which files must be rebuilt
 */
 
+#include "packages.hh"
+#include "srcrelatives.hh"
+#include "target.hh"
+
 #include <filesystem>
 #include <functional>
 #include <optional>
 #include <span>
 #include <vector>
 
-#include "common.hh"
-#include "packages.hh"
-#include "srcrelatives.hh"
-#include "target.hh"
-
-enum class FileType
-{
+enum class FileType : uint8_t {
   CSource,
   CHeader,
 
@@ -24,73 +22,85 @@ enum class FileType
   CXXHeader,
 };
 
-FileType
-translate_filename_to_filetype(std::filesystem::path const s);
+auto
+translate_filename_to_filetype(std::filesystem::path const& s) -> FileType;
 
 // identifiers rely on triplet, so you need to pass one
-PackageIdentifier
-get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet);
+auto
+get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet)
+  -> PackageIdentifier;
 
-std::filesystem::path
-get_artifact_folder(PackageIdentifier const& ident);
+auto
+get_artifact_folder(PackageIdentifier const& ident) -> std::filesystem::path;
 
-std::string
-get_c_standard_string(int std);
-std::string
-get_cxx_standard_string(int std);
+auto
+get_c_standard_string(int std) -> std::string;
+auto
+get_cxx_standard_string(int std) -> std::string;
 
-std::vector<std::filesystem::path>
-get_cxx_source_filepaths(ConfigurationFile const&);
+auto
+get_cxx_source_filepaths(ConfigurationFile const&)
+  -> std::vector<std::filesystem::path>;
 
-std::vector<std::filesystem::path>
-get_c_source_filepaths(ConfigurationFile const&);
+auto
+get_c_source_filepaths(ConfigurationFile const&)
+  -> std::vector<std::filesystem::path>;
 
-std::string
-static_library_name_for_project(ConfigurationFile const& config,
-                                bool const PIE);
-std::string
-dynamic_library_name_for_project(ConfigurationFile const& config);
+auto
+static_library_name_for_project(ConfigurationFile const& config, bool PIE)
+  -> std::string;
+auto
+dynamic_library_name_for_project(ConfigurationFile const& config)
+  -> std::string;
 
-std::filesystem::path
-get_cache_folder(std::string_view target_name, bool release, bool pic);
+auto
+get_cache_folder(std::string_view target_name, bool release, bool pic)
+  -> std::filesystem::path;
 
-std::filesystem::path
-object_file_for_cxx(std::filesystem::path cache_folder,
-                    std::filesystem::path src_folder,
-                    std::filesystem::path abs_src_file);
+auto
+object_file_for_cxx(std::filesystem::path const& cache_folder,
+                    std::filesystem::path const& src_folder,
+                    std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path;
 
-std::filesystem::path
-object_file_for_c(std::filesystem::path cache_folder,
-                  std::filesystem::path src_folder,
-                  std::filesystem::path abs_src_file);
+auto
+object_file_for_c(std::filesystem::path const& cache_folder,
+                  std::filesystem::path const& src_folder,
+                  std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path;
 
 // converts a source-path source file
 // to it's cache-path dependency file
-std::filesystem::path
-depfile_for_cxx(std::filesystem::path cache_folder,
-                std::filesystem::path src_folder,
-                std::filesystem::path abs_src_file);
+auto
+depfile_for_cxx(std::filesystem::path const& cache_folder,
+                std::filesystem::path const& src_folder,
+                std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path;
 
-std::filesystem::path
-depfile_for_c(std::filesystem::path cache_folder,
-              std::filesystem::path src_folder,
-              std::filesystem::path abs_src_file);
+auto
+depfile_for_c(std::filesystem::path const& cache_folder,
+              std::filesystem::path const& src_folder,
+              std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path;
 
 // converts the list of source files in the config
 // into a list of files for each filetype
-std::vector<std::filesystem::path>
-get_files_by_type(std::span<std::filesystem::path const> source_files,
-                  FileType);
+auto
+get_files_by_type(std::span<std::filesystem::path const> source_files, FileType)
+  -> std::vector<std::filesystem::path>;
 
-std::optional<unsigned>
-get_modification_date_of_file(std::filesystem::path const p);
+auto
+get_modification_date_of_file(std::filesystem::path const& p)
+  -> std::optional<unsigned>;
 
 // sources can be any number of c/cxx files
 // returns a sublist of the provided files
 // that should be rebuilt, based on
 // modification date and include dependencies
-std::vector<std::reference_wrapper<CSourceRelatives::File const>>
-mark_c_files_for_rebuild(CSourceRelatives const&);
+auto
+mark_c_files_for_rebuild(CSourceRelatives const&)
+  -> std::vector<std::reference_wrapper<CSourceRelatives::File const>>;
 
-std::vector<std::reference_wrapper<CXXSourceRelatives::File const>>
-mark_cxx_files_for_rebuild(CXXSourceRelatives const&);
+auto
+mark_cxx_files_for_rebuild(CXXSourceRelatives const&)
+  -> std::vector<std::reference_wrapper<CXXSourceRelatives::File const>>;

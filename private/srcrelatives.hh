@@ -6,8 +6,7 @@
 class CSourceRelatives
 {
 public:
-  struct File
-  {
+  struct File {
     File(std::filesystem::path source,
          std::filesystem::path object,
          std::filesystem::path depends)
@@ -28,32 +27,47 @@ public:
   };
 
   /* source file must be relative to source_directory */
-  CSourceRelatives(std::filesystem::path const& cache_directory,
-                   std::filesystem::path const& source_directory,
+  CSourceRelatives(std::filesystem::path const&           cache_directory,
+                   std::filesystem::path const&           source_directory,
                    std::span<std::filesystem::path const> source_file);
 
-  CSourceRelatives(const CSourceRelatives&) = delete;
-  CSourceRelatives& operator=(const CSourceRelatives&) = delete;
+  CSourceRelatives(CSourceRelatives const&) = delete;
+  CSourceRelatives&
+  operator=(CSourceRelatives const&)
+    = delete;
 
   CSourceRelatives(CSourceRelatives&&) = default;
-  CSourceRelatives& operator=(CSourceRelatives&&) = default;
+  CSourceRelatives&
+  operator=(CSourceRelatives&&)
+    = default;
 
-  auto const& cache_directory() const { return m_cacheDirectory; }
-  auto const& source_directory() const { return m_sourceDirectory; }
+  auto const&
+  cache_directory() const
+  {
+    return m_cacheDirectory;
+  }
+  auto const&
+  source_directory() const
+  {
+    return m_sourceDirectory;
+  }
 
-  std::span<File const> files() const { return m_files; }
+  std::span<File const>
+  files() const
+  {
+    return m_files;
+  }
 
 private:
   std::filesystem::path m_cacheDirectory;
   std::filesystem::path m_sourceDirectory;
-  std::vector<File> m_files;
+  std::vector<File>     m_files;
 };
 
 class CXXSourceRelatives
 {
 public:
-  struct File
-  {
+  struct File {
     File(std::filesystem::path source,
          std::filesystem::path object,
          std::filesystem::path depends)
@@ -74,23 +88,39 @@ public:
   };
 
   /* source file must be relative to source_directory */
-  CXXSourceRelatives(std::filesystem::path const& cache_directory,
-                     std::filesystem::path const& source_directory,
+  CXXSourceRelatives(std::filesystem::path const&           cache_directory,
+                     std::filesystem::path const&           source_directory,
                      std::span<std::filesystem::path const> source_file);
 
-  CXXSourceRelatives(const CXXSourceRelatives&) = delete;
-  CXXSourceRelatives& operator=(const CXXSourceRelatives&) = delete;
+  CXXSourceRelatives(CXXSourceRelatives const&) = delete;
+  CXXSourceRelatives&
+  operator=(CXXSourceRelatives const&)
+    = delete;
 
   CXXSourceRelatives(CXXSourceRelatives&&) = default;
-  CXXSourceRelatives& operator=(CXXSourceRelatives&&) = default;
+  CXXSourceRelatives&
+  operator=(CXXSourceRelatives&&)
+    = default;
 
-  auto const& cache_directory() const { return m_cacheDirectory; }
-  auto const& source_directory() const { return m_sourceDirectory; }
+  auto const&
+  cache_directory() const
+  {
+    return m_cacheDirectory;
+  }
+  auto const&
+  source_directory() const
+  {
+    return m_sourceDirectory;
+  }
 
-  std::span<File const> files() const { return m_files; }
+  std::span<File const>
+  files() const
+  {
+    return m_files;
+  }
 
 private:
   std::filesystem::path m_cacheDirectory;
   std::filesystem::path m_sourceDirectory;
-  std::vector<File> m_files;
+  std::vector<File>     m_files;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
+#include "app.hh"
 #include "cmdline.hh"
 
 void
-init(InitOptions const&, std::span<std::string const> bares);
+init(AppContext const& ctx);

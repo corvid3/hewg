@@ -1,18 +1,23 @@
 #include "analysis.hh"
+#include "build.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
 #include "deptree.hh"
+#include "link.hh"
 #include "packages.hh"
+#include "paths.hh"
 #include "target.hh"
+
 #include <filesystem>
 
-static auto
-generate_link_flags(ConfigurationFile const&,
-                    TargetFile const& target,
-                    bool const,
+namespace
+{
+
+auto
+generate_link_flags(BuildContext const&                    build,
                     std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path const output_filepath)
+                    std::filesystem::path const&           outfile)
 {
   std::vector<std::string> args;
 
@@ -21,11 +26,11 @@ generate_link_flags(ConfigurationFile const&,
     return std::filesystem::relative(file);
   });
 
-  args.push_back("-o");
-  args.push_back(output_filepath);
+  args.emplace_back("-o");
+  args.emplace_back(outfile);
 
-  if (target.ld != "ld")
-    args.push_back(std::format("-fuse-ld={}", target.ld));
+  if (build.target().ld != "ld")
+    args.push_back(std::format("-fuse-ld={}", build.target().ld));
 
   // if (is_release)
   //   args.push_back("-flto");
@@ -37,105 +42,96 @@ generate_link_flags(ConfigurationFile const&,
 
 // TODO: link libraries from packages
 // this requires dependency resolvement...
-static auto
-get_library_flags(ConfigurationFile const& config,
-                  TargetFile const& target,
-                  PackageCacheDB const& db,
-                  Deptree const& deptree,
-                  bool const PIE)
+auto
+get_library_flags(AppContext const&     ctx,
+                  PackageContext const& pkg,
+                  BuildContext const&   build)
 {
   std::vector<std::string> args;
 
-  for (auto const& sys : config.depends.system_libraries)
+  args.reserve(ctx.config().depends.system_libraries.size());
+  for (auto const& sys : ctx.config().depends.system_libraries)
     args.push_back(std::format("-l{}", sys));
 
-  auto const links =
-    collect_packages_to_link(config, db, target.triplet, deptree);
+  auto const links = collect_packages_to_link(ctx, pkg);
 
   for (auto const& ident : links) {
-    args.push_back(std::format(
-      "{}",
-      std::filesystem::canonical(get_packages_static_library_file(ident, PIE))
-        .string()));
+    args.push_back(
+      std::format("{}",
+                  std::filesystem::canonical(
+                    get_packages_static_library_file(ident, build.pic()))
+                    .string()));
   }
 
-  args.push_back("-L/usr/local/lib");
+  args.emplace_back("-L/usr/local/lib");
 
   return args;
 }
 
+}
+
 void
-link_executable(ConfigurationFile const& config,
-                TargetFile const& target,
-                BuildOptions const& options,
-                PackageCacheDB const& db,
-                Deptree const& deptree,
-                std::span<std::filesystem::path const> object_files,
-                std::filesystem::path output_directory)
+link_executable(AppContext const&                      ctx,
+                PackageContext const&                  pkg,
+                BuildContext const&                    build,
+                std::span<std::filesystem::path const> object_files)
 {
-  if (not std::filesystem::is_directory(output_directory))
+  if (not std::filesystem::is_directory(build.emitdir()))
     throw std::runtime_error("output_directory in link() isn't a directory");
 
-  auto const output_filepath = output_directory / config.project.name;
+  auto const output_filepath = build.emitdir() / ctx.config().project.name;
 
-  auto args = generate_link_flags(
-    config, target, options.release, object_files, output_filepath);
+  auto args = generate_link_flags(build, object_files, output_filepath);
 
   threadsafe_print("now lets get linking...\n");
-  append_vec(args, get_library_flags(config, target, db, deptree, false));
+  append_vec(args, get_library_flags(ctx, pkg, build));
 
-  run_command(target.cxx, args);
+  run_command(build.target().cxx, args);
 
   // we also want to strip the executable if we're
   // creating a release executable
-  if (options.release) {
+  if (ctx.build_options().release) {
     run_command("strip", "-s", output_filepath.string());
   }
 }
 
 void
-pack_static_library(ConfigurationFile const& config,
-                    TargetFile const& target,
-                    std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path output_directory,
-                    bool const PIC)
+pack_static_library(AppContext const&                      ctx,
+                    BuildContext const&                    build,
+                    std::span<std::filesystem::path const> object_files)
 {
-  if (not std::filesystem::is_directory(output_directory))
+  if (not std::filesystem::is_directory(build.emitdir()))
     throw std::runtime_error(
       "output_directory in pack_static_library() isn't a directory");
 
-  std::filesystem::path const outfile =
-    output_directory / static_library_name_for_project(config, PIC);
+  std::filesystem::path const outfile
+    = build.emitdir()
+    / static_library_name_for_project(ctx.config(), build.pic());
 
   std::vector<std::string> commands;
-  commands.push_back("rcs");
+  commands.emplace_back("rcs");
   commands.push_back(outfile.string());
   for (auto const& objects : object_files)
     commands.push_back(objects.string());
-  run_command(target.ar, commands);
+  run_command(build.target().ar, commands);
 }
 
 void
-shared_link(ConfigurationFile const& config,
-            TargetFile const& target,
-            BuildOptions const& options,
-            PackageCacheDB const& db,
-            Deptree const& deptree,
-            std::span<std::filesystem::path const> object_files,
-            std::filesystem::path output_directory)
+shared_link(AppContext const&                      ctx,
+            PackageContext const&                  pkg,
+            BuildContext const&                    build,
+            std::span<std::filesystem::path const> object_files)
 {
-  if (not std::filesystem::is_directory(output_directory))
+  if (not std::filesystem::is_directory(build.emitdir()))
     throw std::runtime_error(
       "output_directory in shared_link() isn't a directory");
 
-  std::filesystem::path const outfile =
-    output_directory / std::format("lib{}.so", config.project.name);
+  std::filesystem::path const outfile
+    = build.emitdir() / std::format("lib{}.so", ctx.config().project.name);
+  std::vector<std::string> args
+    = generate_link_flags(build, object_files, outfile);
+  append_vec(args, get_library_flags(ctx, pkg, build));
+  args.emplace_back("-shared");
 
-  std::vector<std::string> args =
-    generate_link_flags(config, target, options.release, object_files, outfile);
-
-  append_vec(args, get_library_flags(config, target, db, deptree, true));
-  args.push_back("-shared");
-
-  run_command(target.cxx, args);
+  run_command(build.target().cxx, args);
 }

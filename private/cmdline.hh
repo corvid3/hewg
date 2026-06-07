@@ -3,19 +3,17 @@
 #include <crow.terse/terse.hh>
 #include <optional>
 #include <thread>
+#include <variant>
 
-struct CleanOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "clean";
+struct CleanOptions {
+  constexpr static auto name  = "clean";
   constexpr static auto usage = "";
-
-  constexpr static auto short_description =
-    "removes all build artifacts from the hewg cache";
-
-  constexpr static auto description =
-    "Removes any and all build artifacts from the hewg cache, that is object "
-    "files and persistent information about the build system. Use this to "
-    "force a full recompile of a project.";
+  constexpr static auto short_description
+    = "removes all build artifacts from the hewg cache";
+  constexpr static auto description
+    = "Removes any and all build artifacts from the hewg cache, that is object "
+      "files and persistent information about the build system. Use this to "
+      "force a full recompile of a project.";
 
   bool help = false;
 
@@ -23,18 +21,18 @@ struct CleanOptions : terse::TerminalSubcommand
     terse::Option<"help", 'h', "prints this help", &CleanOptions::help>>;
 };
 
-struct InitOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "init";
-  constexpr static auto usage = "<type> <name>";
+struct InitOptions {
+  constexpr static auto name              = "init";
+  constexpr static auto usage             = "<type> <name>";
   constexpr static auto short_description = "creates a basic hewg project";
-  constexpr static auto description =
-    "Initializes a basic hewg project in the current directory. Project type "
-    "is one of <executable>, <library>, <shared>, or <headers>. A name must be "
-    "provided.";
+  constexpr static auto description
+    = "Initializes a basic hewg project in the current directory. Project type "
+      "is one of <executable>, <library>, <shared>, or <headers>. A name must "
+      "be "
+      "provided.";
 
   std::optional<std::string> directory;
-  bool help = false;
+  bool                       help = false;
 
   using options = std::tuple<
     terse::Option<"help", 'h', "prints this help", &InitOptions::help>,
@@ -45,22 +43,22 @@ struct InitOptions : terse::TerminalSubcommand
       &InitOptions::directory>>;
 };
 
-struct BuildOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "build";
+struct BuildOptions {
+  constexpr static auto name  = "build";
   constexpr static auto usage = "<profile>";
-  constexpr static auto short_description =
-    "triggers the hewg build system on the current project";
-  constexpr static auto description =
-    "Builds the current project based off of "
-    "the provided build profile. Defaults to the running operating system.";
+  constexpr static auto short_description
+    = "triggers the hewg build system on the current project";
+  constexpr static auto description
+    = "Builds the current project based off of "
+      "the provided build profile. Defaults to the running operating system.";
 
-  bool help = false;
-  bool release = false;
-  bool install = false;
-  bool force_debug = false;
-  bool gen_compile_commands = false;
-  std::optional<std::string> target = std::nullopt;
+  bool                       help                 = false;
+  bool                       release              = false;
+  bool                       install              = false;
+  bool                       force_debug          = false;
+  bool                       gen_compile_commands = false;
+  std::optional<std::string> target               = std::nullopt;
+  std::optional<std::string> profile              = std::nullopt;
 
   using options = std::tuple<
     terse::Option<"help", 'h', "prints this help", &BuildOptions::help>,
@@ -87,76 +85,88 @@ struct BuildOptions : terse::TerminalSubcommand
     terse::Option<"target",
                   std::nullopt,
                   "sets the target triple to build for",
-                  &BuildOptions::target>>;
+                  &BuildOptions::target>,
+    terse::Option<"profile",
+                  std::nullopt,
+                  "chooses a release profile",
+                  &BuildOptions::profile>>;
 };
 
-struct TestAllOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "all";
-  constexpr static auto usage = "hewg test all";
+struct TestAllOptions {
+  constexpr static auto name              = "all";
+  constexpr static auto usage             = "hewg test all";
   constexpr static auto short_description = "run all tests";
-  constexpr static auto description = short_description;
+  constexpr static auto description       = short_description;
 
   using options = std::tuple<>;
 };
 
-struct TestOptions : terse::NonterminalSubcommand
-{
-  constexpr static auto name = "test";
+struct TestOptions {
+  constexpr static auto name  = "test";
   constexpr static auto usage = "hewg test all";
-  constexpr static auto short_description =
-    "subcommand to interface the test suite";
+  constexpr static auto short_description
+    = "subcommand to interface the test suite";
   constexpr static auto description = short_description;
 
-  using options = std::tuple<>;
+  using options     = std::tuple<>;
   using subcommands = std::tuple<>;
 };
 
-struct PackageSelectOptions : terse::TerminalSubcommand
-{
-  constexpr static auto name = "select";
+struct PackageSelectOptions {
+  constexpr static auto name  = "select";
   constexpr static auto usage = "hewg packge select <package> <version>";
-  constexpr static auto short_description =
-    "update package link to point to a specific version";
-  constexpr static auto description =
-    "updates a link within the users path such that the link points to a "
-    "specified version of an installed hewg package";
+  constexpr static auto short_description
+    = "update package link to point to a specific version";
+  constexpr static auto description
+    = "updates a link within the users path such that the link points to a "
+      "specified version of an installed hewg package";
 
   using options = std::tuple<>;
 };
 
-struct PackageOptions : terse::NonterminalSubcommand
-{
-  constexpr static auto name = "package";
+struct PackageOptions {
+  constexpr static auto name  = "package";
   constexpr static auto usage = "hewg package <subcommand>";
-  constexpr static auto short_description =
-    "interact with the installed hewg packages";
-  constexpr static auto description =
-    "interact with installed hewg packages to either uninstall, select, list, "
-    "or otherwise manage";
+  constexpr static auto short_description
+    = "interact with the installed hewg packages";
+  constexpr static auto description
+    = "interact with installed hewg packages to either uninstall, select, "
+      "list, "
+      "or otherwise manage";
 
-  using options = std::tuple<>;
+  using options     = std::tuple<>;
   using subcommands = std::tuple<PackageSelectOptions>;
 };
 
-struct ToplevelOptions : terse::NonterminalSubcommand
-{
-  bool force = false;
-  bool skip_pause = false;
+struct ToplevelOptions {
+  std::variant<std::monostate,
+               BuildOptions,
+               CleanOptions,
+               InitOptions,
+               TestOptions,
+               PackageOptions>
+                           terse_subcmds;
+  std::vector<std::string> terse_bares;
 
-  bool verbose_print = false;
-  unsigned num_tasks = std::thread::hardware_concurrency();
+  bool                       force         = false;
+  bool                       skip_pause    = false;
+  bool                       verbose_print = false;
+  unsigned                   num_tasks = std::thread::hardware_concurrency();
   std::optional<std::string> config_file_path;
+
+  /* target used to index into the config file */
+  std::optional<std::string> target = std::nullopt;
 
   bool print_version = false;
 
-  constexpr static auto name = "hewg";
+  constexpr static auto name  = "hewg";
   constexpr static auto usage = "";
-  constexpr static auto short_description =
-    "C/CXX build system and package manager infrastructure";
-  constexpr static auto description =
-    "C/CXX build system and package manager infrastructure. Expects a hewg.scl "
-    "file in the current directory to do anything.";
+  constexpr static auto short_description
+    = "C/CXX build system and package manager infrastructure";
+  constexpr static auto description
+    = "C/CXX build system and package manager infrastructure. Expects a "
+      "hewg.scl "
+      "file in the current directory to do anything.";
 
   using options = std::tuple<
     terse::Option<"force",
@@ -184,10 +194,8 @@ struct ToplevelOptions : terse::NonterminalSubcommand
                   std::nullopt,
                   "prints the version of hewg",
                   &ToplevelOptions::print_version>>;
-
-  using subcommands = std::
-    tuple<BuildOptions, CleanOptions, InitOptions, TestOptions, PackageOptions>;
 };
 
-decltype(terse::execute<ToplevelOptions>({}, {}))
-parse_cmdline(int argc, char** argv);
+auto
+parse_cmdline(int argc, char** argv)
+  -> decltype(terse::execute<ToplevelOptions>({}, {}));

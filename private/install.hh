@@ -1,16 +1,14 @@
 #pragma once
 
+#include "app.hh"
+#include "build.hh"
 #include "cmdline.hh"
 #include "confs.hh"
 #include "packages.hh"
 #include "target.hh"
 
 void
-install(ConfigurationFile const& config,
-        PackageCacheDB& db,
-        TargetTriplet target,
-        BuildOptions const& options);
+install(AppContext const& ctx, PackageContext const& pkg);
 
 void
-select_executable(PackageCacheDB const& db,
-                  PackageIdentifier const package_ident);
+select_executable(PackageCacheDB const& db, PackageIdentifier package_ident);

@@ -1,37 +1,40 @@
+#include "confs.hh"
+#include "hooks.hh"
+#include "paths.hh"
+#include "thread_pool.hh"
+
 #include <algorithm>
 #include <crow.jayson/jayson.hh>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
-#include "confs.hh"
-#include "hooks.hh"
-#include "paths.hh"
-#include "thread_pool.hh"
-
-struct HookCache
-{
+struct HookCache {
   std::vector<std::string> once_hooks_ran;
 
-  using jayson_fields =
-    std::tuple<jayson::obj_field<"once_hooks", &HookCache::once_hooks_ran>>;
+  using jayson_fields
+    = std::tuple<jayson::obj_field<"once_hooks", &HookCache::once_hooks_ran>>;
 };
 
 class HookCacheAccess
 {
 public:
-  static HookCache& get_cache()
+  static auto
+  get_cache() -> HookCache&
   {
     if (not m_cache) {
       m_cache = open_hook_cache();
-      std::atexit([]() { write_hook_cache(*m_cache); });
+      std::atexit([]() {
+        write_hook_cache(*m_cache);
+      });
     }
 
     return *m_cache;
   }
 
 private:
-  static HookCache open_hook_cache()
+  static auto
+  open_hook_cache() -> HookCache
   {
     if (not std::filesystem::exists(hewg_hook_cache_path))
       return {};
@@ -43,7 +46,8 @@ private:
     return jayson::deserialize<HookCache>(v);
   }
 
-  static void write_hook_cache(HookCache cache)
+  static void
+  write_hook_cache(HookCache const& cache)
   {
     std::ofstream(hewg_hook_cache_path)
       << (jayson::serialize(cache).serialize());
@@ -52,7 +56,9 @@ private:
   static inline std::optional<HookCache> m_cache;
 };
 
-static void
+namespace
+{
+void
 trigger_once(HookCache& cache, HooksConf const& hooks)
 {
   for (auto const& hook : hooks.once) {
@@ -63,11 +69,12 @@ trigger_once(HookCache& cache, HooksConf const& hooks)
   }
 }
 
-static void
+void
 trigger_all(HooksConf const& hooks)
 {
   for (auto const& hook : hooks.always)
     run_command("sh", (hewg_hook_path / hook).string());
+}
 }
 
 void

@@ -1,3 +1,11 @@
+#include "app.hh"
+#include "build.hh"
+#include "cmdline.hh"
+#include "common.hh"
+#include "init.hh"
+#include "paths.hh"
+
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <crow.jayson/jayson.hh>
@@ -7,9 +15,6 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
-#include <optional>
-#include <print>
-#include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -17,35 +22,23 @@
 #include <variant>
 #include <vector>
 
-#include "build.hh"
-#include "cmdline.hh"
-#include "common.hh"
-#include "confs.hh"
-#include "init.hh"
-#include "install.hh"
-#include "packages.hh"
-#include "paths.hh"
-#include "thread_pool.hh"
-
 // i don't want to see m'code squandered...
 // auto const link_step_messages = { "now, let's get linking..." };
 
-static void
-clean(ThreadPool&,
-      ConfigurationFile const&,
-      CleanOptions const&,
-      std::span<std::string const> bares)
+namespace
 {
-  if (bares.size() > 0)
-    throw std::runtime_error(
-      "clean subcommand does not take any bare arguments!");
 
+constexpr auto terminal_countdown_length = 5;
+
+void
+clean()
+{
   if (not std::filesystem::exists(hewg_cache_path))
     return;
 
   std::vector<std::filesystem::path> to_clean;
 
-  auto const delete_if_exists = [&](std::filesystem::path what) {
+  auto const delete_if_exists = [&](std::filesystem::path const& what) {
     if (not std::filesystem::exists(what))
       return;
     to_clean.push_back(what);
@@ -60,33 +53,87 @@ clean(ThreadPool&,
   for (auto const& sf : to_clean)
     threadsafe_print(std::format("deleting: {}\n", sf.string()));
 
-  do_terminal_countdown(5);
+  do_terminal_countdown(terminal_countdown_length);
 
   for (auto const& sf : to_clean)
     std::filesystem::remove_all(sf);
 }
 
-int
-main(int argc, char** argv)
+void
+do_build(AppContext& ctx)
+{
+  if (ctx.build_options().help) {
+    std::cout << terse::print_usage<BuildOptions>() << '\n';
+    return;
+  }
+
+  build(ctx);
+}
+
+void
+do_clean(AppContext& ctx)
+{
+  if (ctx.clean_options().help) {
+    std::cout << terse::print_usage<CleanOptions>() << '\n';
+    return;
+  }
+
+  clean();
+}
+
+void
+do_init(AppContext const& ctx)
+{
+  if (ctx.init_options().help) {
+    std::cout << terse::print_usage<InitOptions>() << '\n';
+    return;
+  }
+
+  init(ctx);
+}
+
+void
+do_package(AppContext const& ctx)
+
+{
+  (void) ctx;
+  assert(false);
+
+  // auto const& [options, packsubcmds] = terse::get<PackageOptions>(scmds);
+
+  // if (terse::holds<std::monostate>(packsubcmds)) {
+  //   std::cout << terse::print_usage<PackageOptions>() << '\n';
+  // } else if (terse::holds<PackageSelectOptions>(packsubcmds)) {
+  //   if (bares.size() != 1) {
+  //     std::println("select expects a single argument, the package
+  //     identifier"); return;
+  //   }
+
+  //   auto ident = parse_package_identifier(bares[0]);
+  //   if (not ident)
+  //     throw std::runtime_error(
+  //       std::format("invalid package identifier, {}", bares[0]));
+
+  //   auto db = open_package_db();
+
+  //   select_executable(db, *ident);
+  // }
+}
+
+}
+
+auto
+main(int argc, char** argv) -> int
 try {
-  auto const [tl_options, scmds, bares] = parse_cmdline(argc, argv);
-
-  if (tl_options.verbose_print)
-    verbose_output = true;
-
-  skip_countdown = tl_options.skip_pause;
-
-  auto const config_path = tl_options.config_file_path.value_or("./hewg.scl");
+  AppContext ctx(argc, argv);
 
   // TODO: change this with an argument
   threadsafe_print_verbose(
-    std::format("using <{}> tasks\n", tl_options.num_tasks));
-  num_tasks = tl_options.num_tasks;
-  ThreadPool thread_pool(tl_options.num_tasks);
+    std::format("using <{}> tasks\n", ctx.options().num_tasks));
 
-  if (tl_options.print_version) {
+  if (ctx.options().print_version) {
     using namespace std::chrono;
-    auto const dur = duration<long>(__hewg_build_date_package_hewg);
+    auto const dur         = duration<long>(_hewg_build_date_package_hewg);
     auto const since_epoch = time_point<utc_clock, seconds>(dur);
 
     threadsafe_print(std::format("version <{}>\n", this_hewg_version));
@@ -95,76 +142,21 @@ try {
     return 0;
   }
 
-  if (std::holds_alternative<std::monostate>(scmds)) {
-    std::cout << terse::print_usage<ToplevelOptions>() << std::endl;
-  } else if (std::holds_alternative<BuildOptions>(scmds)) {
-    auto options = std::get<BuildOptions>(scmds);
-
-    if (options.help)
-      std::cout << terse::print_usage<BuildOptions>() << std::endl,
-        std::exit(0);
-
-    // install implies release
-    if (options.install == true) {
-      threadsafe_print_verbose("install implies --release");
-      options.release = true;
-    }
-
-    if (options.force_debug)
-      threadsafe_print_verbose("forcing release OFF"), options.release = false;
-
-    auto const target_triplet =
-      TargetTriplet(options.target.value_or(THIS_TARGET));
-    auto const target_file = get_target_file(target_triplet);
-    ConfigurationFile const config =
-      get_config_file(tl_options, target_triplet, config_path);
-    auto db = open_package_db();
-    build(thread_pool, config, db, target_file, options);
-
-    if (options.install)
-      install(config, db, target_triplet, options);
-  } else if (std::holds_alternative<CleanOptions>(scmds)) {
-    auto options = std::get<CleanOptions>(scmds);
-
-    if (options.help)
-      std::cout << terse::print_usage<CleanOptions>() << std::endl,
-        std::exit(0);
-
-    ConfigurationFile const config =
-      get_config_file(tl_options, std::nullopt, config_path);
-
-    clean(thread_pool, config, options, bares);
-  } else if (std::holds_alternative<InitOptions>(scmds)) {
-    auto options = std::get<InitOptions>(scmds);
-
-    if (options.help)
-      std::cout << terse::print_usage<InitOptions>() << std::endl, std::exit(0);
-
-    init(options, bares);
-  } else if (terse::holds<PackageOptions>(scmds)) {
-    auto [options, packsubcmds] = terse::get<PackageOptions>(scmds);
-
-    if (terse::holds<std::monostate>(packsubcmds)) {
-      std::cout << terse::print_usage<PackageOptions>() << std::endl,
-        std::exit(0);
-    } else if (terse::holds<PackageSelectOptions>(packsubcmds)) {
-      if (bares.size() != 1)
-        std::println(
-          "select expects a single argument, the package identifier"),
-          exit(1);
-
-      auto ident = parse_package_identifier(bares[0]);
-      if (not ident)
-        throw std::runtime_error(
-          std::format("invalid package identifier, {}", bares[0]));
-
-      auto db = open_package_db();
-
-      select_executable(db, *ident);
-    }
+  if (std::holds_alternative<std::monostate>(ctx.options().terse_subcmds)) {
+    std::cout << terse::print_usage<ToplevelOptions>() << '\n';
+  } else if (std::holds_alternative<BuildOptions>(
+               ctx.options().terse_subcmds)) {
+    do_build(ctx);
+  } else if (std::holds_alternative<CleanOptions>(
+               ctx.options().terse_subcmds)) {
+    do_clean(ctx);
+  } else if (std::holds_alternative<InitOptions>(ctx.options().terse_subcmds)) {
+    do_init(ctx);
+  } else if (std::holds_alternative<PackageOptions>(
+               ctx.options().terse_subcmds)) {
+    do_package(ctx);
   }
 } catch (std::exception const& e) {
   threadsafe_print("ERROR: ", e.what(), '\n');
-
-  exit(1);
+  return 0;
 }

@@ -1,3 +1,11 @@
+#include "analysis.hh"
+#include "common.hh"
+#include "confs.hh"
+#include "depfile.hh"
+#include "packages.hh"
+#include "paths.hh"
+#include "semver.hh"
+
 #include <algorithm>
 #include <chrono>
 #include <crow.jayson/jayson.hh>
@@ -11,16 +19,8 @@
 #include <system_error>
 #include <vector>
 
-#include "analysis.hh"
-#include "common.hh"
-#include "confs.hh"
-#include "depfile.hh"
-#include "packages.hh"
-#include "paths.hh"
-#include "semver.hh"
-
-FileType
-translate_filename_to_filetype(std::filesystem::path const s)
+auto
+translate_filename_to_filetype(std::filesystem::path const& s) -> FileType
 {
   auto const ext = s.extension();
 
@@ -44,8 +44,9 @@ get_this_package_ident(ConfigurationFile const& config, TargetTriplet triplet)
 {
   auto const version = parse_semver(config.project.version);
   if (not version)
-    throw std::runtime_error("invalid project semver while attempting to "
-                             "create this packages identifier");
+    throw std::runtime_error(
+      "invalid project semver while attempting to "
+      "create this packages identifier");
 
   return PackageIdentifier(
     config.project.org, config.project.name, *version, triplet);
@@ -61,17 +62,13 @@ std::string
 get_c_standard_string(int std)
 {
   switch (std) {
-    case 99:
-      return "c99";
-    case 11:
-      return "c11";
-    case 17:
-      return "c17";
-    case 23:
-      return "c23";
+  case 99: return "c99";
+  case 11: return "c11";
+  case 17: return "c17";
+  case 23: return "c23";
 
-    default:
-      throw std::runtime_error(std::format("unrecognized std <{}> for C", std));
+  default:
+    throw std::runtime_error(std::format("unrecognized std <{}> for C", std));
   }
 }
 
@@ -79,24 +76,16 @@ std::string
 get_cxx_standard_string(int std)
 {
   switch (std) {
-    case 98:
-      return "c++98";
-    case 3:
-      return "c++03";
-    case 11:
-      return "c++11";
-    case 14:
-      return "c++14";
-    case 17:
-      return "c++17";
-    case 20:
-      return "c++20";
-    case 23:
-      return "c++23";
+  case 98: return "c++98";
+  case 3 : return "c++03";
+  case 11: return "c++11";
+  case 14: return "c++14";
+  case 17: return "c++17";
+  case 20: return "c++20";
+  case 23: return "c++23";
 
-    default:
-      throw std::runtime_error(
-        std::format("unrecognized std <{}> for C++", std));
+  default:
+    throw std::runtime_error(std::format("unrecognized std <{}> for C++", std));
   }
 }
 
@@ -119,18 +108,20 @@ get_cxx_source_filepaths(ConfigurationFile const& conf)
   return paths;
 }
 
-std::vector<std::filesystem::path>
+auto
 get_c_source_filepaths(ConfigurationFile const& conf)
+  -> std::vector<std::filesystem::path>
 {
   std::vector<std::filesystem::path> paths;
 
   for (auto const& file : conf.c.sources) {
     auto const filepath = hewg_c_src_directory_path / file;
 
-    if (not is_subpathed_by(hewg_c_src_directory_path, filepath))
+    if (not is_subpathed_by(hewg_c_src_directory_path, filepath)) {
       throw std::runtime_error(
         std::format("source file <{}> is outside of the source directory!",
                     filepath.string()));
+    }
 
     paths.push_back(filepath);
   }
@@ -138,26 +129,29 @@ get_c_source_filepaths(ConfigurationFile const& conf)
   return paths;
 }
 
-std::string
+auto
 static_library_name_for_project(ConfigurationFile const& config, bool const PIE)
+  -> std::string
 {
   return std::format("lib{}{}.a", config.project.name, PIE ? "-PIE" : "");
 }
 
-std::string
-dynamic_library_name_for_project(ConfigurationFile const& config)
+auto
+dynamic_library_name_for_project(ConfigurationFile const& config) -> std::string
 {
   return std::format("lib{}.{}.so", config.project.org, config.project.name);
 }
 
-std::filesystem::path
+auto
 get_target_folder_for_build_profile(std::string_view const profile)
+  -> std::filesystem::path
 {
   return hewg_target_directory_path / profile;
 }
 
-std::filesystem::path
+auto
 get_cache_folder(std::string_view target_name, bool release, bool pic)
+  -> std::filesystem::path
 {
   auto const inner = std::format(
     "{}{}{}", target_name, pic ? "-pic" : "", release ? "-rel" : "");
@@ -166,11 +160,12 @@ get_cache_folder(std::string_view target_name, bool release, bool pic)
 
   create_directory_checked(folder);
 
-  if (not is_subpathed_by(hewg_cache_path, folder))
+  if (not is_subpathed_by(hewg_cache_path, folder)) {
     throw std::runtime_error(
       std::format("cache folder <{}> is not subpathed by <{}>????",
                   hewg_cache_path.string(),
                   folder.string()));
+  }
 
   create_directory_checked(folder / "cxx_objects");
   create_directory_checked(folder / "c_objects");
@@ -180,76 +175,81 @@ get_cache_folder(std::string_view target_name, bool release, bool pic)
   return hewg_cache_path / "incremental" / inner;
 }
 
-std::filesystem::path
-object_file_for_cxx(std::filesystem::path cache_folder,
-                    std::filesystem::path src_folder,
-                    std::filesystem::path abs_src_file)
+auto
+object_file_for_cxx(std::filesystem::path const& cache_folder,
+                    std::filesystem::path const& src_folder,
+                    std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path
 {
   assert_is_absolute(abs_src_file);
   assert_is_subpathed(src_folder, abs_src_file);
 
-  auto const relative_to_src =
-    std::filesystem::relative(abs_src_file, src_folder);
+  auto const relative_to_src
+    = std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "cxx_objects" / relative_to_src)
     .replace_extension(".o");
 }
 
-std::filesystem::path
-object_file_for_c(std::filesystem::path cache_folder,
-                  std::filesystem::path src_folder,
-                  std::filesystem::path abs_src_file)
+auto
+object_file_for_c(std::filesystem::path const& cache_folder,
+                  std::filesystem::path const& src_folder,
+                  std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path
 {
   assert_is_absolute(abs_src_file);
   assert_is_subpathed(src_folder, abs_src_file);
 
-  auto const relative_to_src =
-    std::filesystem::relative(abs_src_file, src_folder);
+  auto const relative_to_src
+    = std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "c_objects" / relative_to_src).replace_extension(".o");
 }
 
-std::filesystem::path
-depfile_for_cxx(std::filesystem::path cache_folder,
-                std::filesystem::path src_folder,
-                std::filesystem::path abs_src_file)
+auto
+depfile_for_cxx(std::filesystem::path const& cache_folder,
+                std::filesystem::path const& src_folder,
+                std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path
 {
   assert_is_absolute(abs_src_file);
   assert_is_subpathed(src_folder, abs_src_file);
 
-  auto const relative_to_src =
-    std::filesystem::relative(abs_src_file, src_folder);
+  auto const relative_to_src
+    = std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "cxx_depends" / relative_to_src)
     .replace_extension(".d");
 }
 
-std::filesystem::path
-depfile_for_c(std::filesystem::path cache_folder,
-              std::filesystem::path src_folder,
-              std::filesystem::path abs_src_file)
+auto
+depfile_for_c(std::filesystem::path const& cache_folder,
+              std::filesystem::path const& src_folder,
+              std::filesystem::path const& abs_src_file)
+  -> std::filesystem::path
 {
   assert_is_absolute(abs_src_file);
   assert_is_subpathed(src_folder, abs_src_file);
 
-  auto const relative_to_src =
-    std::filesystem::relative(abs_src_file, src_folder);
+  auto const relative_to_src
+    = std::filesystem::relative(abs_src_file, src_folder);
 
   return (cache_folder / "c_depends" / relative_to_src).replace_extension(".d");
 }
 
 // TODO: i can memoize this, do that later
-std::vector<std::filesystem::path>
+auto
 get_files_by_type(std::span<std::filesystem::path const> files,
-                  FileType const type)
+                  FileType const type) -> std::vector<std::filesystem::path>
 {
   std::vector<std::filesystem::path> selected;
 
   for (auto const& source_filepath : files) {
-    if (not std::filesystem::is_regular_file(source_filepath))
+    if (not std::filesystem::is_regular_file(source_filepath)) {
       throw std::runtime_error(std::format(
         "{} is not a file, despite being listed in project configuration",
         source_filepath.string()));
+    }
 
     auto const extension = translate_filename_to_filetype(source_filepath);
 
@@ -260,11 +260,12 @@ get_files_by_type(std::span<std::filesystem::path const> files,
   return selected;
 }
 
-std::optional<unsigned>
-get_modification_date_of_file(std::filesystem::path const p)
+auto
+get_modification_date_of_file(std::filesystem::path const& p)
+  -> std::optional<unsigned>
 {
   std::error_code code;
-  auto const write_time = std::filesystem::last_write_time(p, code);
+  auto const      write_time = std::filesystem::last_write_time(p, code);
 
   if (code)
     return std::nullopt;
@@ -288,13 +289,13 @@ mark_c_files_for_rebuild(CSourceRelatives const& src)
     /* files for which their depfile or object file does not exist
      * must be rebuilt
      */
-    if (not std::filesystem::exists(src.cache_directory() / file.depends) or
-        not std::filesystem::exists(src.cache_directory() / file.object)) {
+    if (not std::filesystem::exists(src.cache_directory() / file.depends)
+        or not std::filesystem::exists(src.cache_directory() / file.object)) {
       rebuilds.push_back(file);
       continue;
     }
 
-    auto const obj_md = *get_modification_date_of_file(file.object);
+    auto const obj_md  = *get_modification_date_of_file(file.object);
     auto const depfile = parse_depfile(file.depends);
 
     /* go through all files that which this source file
@@ -324,13 +325,13 @@ mark_cxx_files_for_rebuild(CXXSourceRelatives const& src)
     /* files for which their depfile or object file does not exist
      * must be rebuilt
      */
-    if (not std::filesystem::exists(src.cache_directory() / file.depends) or
-        not std::filesystem::exists(src.cache_directory() / file.object)) {
+    if (not std::filesystem::exists(src.cache_directory() / file.depends)
+        or not std::filesystem::exists(src.cache_directory() / file.object)) {
       rebuilds.push_back(file);
       continue;
     }
 
-    auto const obj_md = *get_modification_date_of_file(file.object);
+    auto const obj_md  = *get_modification_date_of_file(file.object);
     auto const depfile = parse_depfile(file.depends);
 
     /* go through all files that which this source file

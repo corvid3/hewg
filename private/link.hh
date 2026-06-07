@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app.hh"
+#include "build.hh"
 #include "cmdline.hh"
 #include "confs.hh"
 #include "deptree.hh"
@@ -7,26 +9,18 @@
 #include "target.hh"
 
 void
-link_executable(ConfigurationFile const& config,
-                TargetFile const& tools,
-                BuildOptions const& options,
-                PackageCacheDB const& db,
-                Deptree const& deptree,
-                std::span<std::filesystem::path const> object_files,
-                std::filesystem::path output_directory);
+link_executable(AppContext const&,
+                PackageContext const& pkg,
+                BuildContext const&,
+                std::span<std::filesystem::path const> object_files);
 
 void
-pack_static_library(ConfigurationFile const& config,
-                    TargetFile const& tools,
-                    std::span<std::filesystem::path const> object_files,
-                    std::filesystem::path output_directory,
-                    bool const PIC);
+pack_static_library(AppContext const&,
+                    BuildContext const&,
+                    std::span<std::filesystem::path const> object_files);
 
 void
-shared_link(ConfigurationFile const& config,
-            TargetFile const& tools,
-            BuildOptions const& options,
-            PackageCacheDB const& db,
-            Deptree const& deptree,
-            std::span<std::filesystem::path const> object_files,
-            std::filesystem::path output_directory);
+shared_link(AppContext const&,
+            PackageContext const& pkg,
+            BuildContext const&,
+            std::span<std::filesystem::path const> object_files);

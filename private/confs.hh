@@ -6,8 +6,7 @@
 #include <string>
 #include <tuple>
 
-enum class PackageType
-{
+enum class PackageType : char {
   Executable,
   StaticLibrary,
   SharedLibrary,
@@ -16,29 +15,29 @@ enum class PackageType
   Headers,
 };
 
-std::string_view project_type_to_string(PackageType);
-std::optional<PackageType> project_type_from_string(std::string_view);
+auto project_type_to_string(PackageType) -> std::string_view;
+auto project_type_from_string(std::string_view) -> std::optional<PackageType>;
 
-struct ProjectTypeEnumDescriptorJayson
-{
-  static auto deserialize(std::string_view what)
+struct ProjectTypeEnumDescriptorJayson {
+  static auto
+  deserialize(std::string_view what)
   {
     return project_type_from_string(what);
   }
 
-  static auto serialize(PackageType const what)
+  static auto
+  serialize(PackageType const what)
   {
     return project_type_to_string(what);
   }
 };
 
-using ProjectTypeEnumDescriptor =
-  scl::enum_field_descriptor<PackageType,
-                             project_type_from_string,
-                             project_type_to_string>;
+using ProjectTypeEnumDescriptor
+  = scl::enum_field_descriptor<PackageType,
+                               project_type_from_string,
+                               project_type_to_string>;
 
-struct MetaConf
-{
+struct MetaConf {
   // hewg version
   std::string hewg_version;
   PackageType type;
@@ -51,32 +50,30 @@ struct MetaConf
     scl::field<&MetaConf::profile_override, "profile_override", false>>;
 };
 
-struct ProjectConf
-{
-  std::string version;
-  std::string name;
-  std::string org;
-  std::string description;
+struct ProjectConf {
+  std::string              version;
+  std::string              name;
+  std::string              org;
+  std::string              description;
   std::vector<std::string> authors;
 
-  using scl_fields =
-    std::tuple<scl::field<&ProjectConf::version, "version">,
-               scl::field<&ProjectConf::name, "name">,
-               scl::field<&ProjectConf::org, "org">,
-               scl::field<&ProjectConf::description, "description">,
-               scl::field<&ProjectConf::authors, "authors">>;
+  using scl_fields
+    = std::tuple<scl::field<&ProjectConf::version, "version">,
+                 scl::field<&ProjectConf::name, "name">,
+                 scl::field<&ProjectConf::org, "org">,
+                 scl::field<&ProjectConf::description, "description">,
+                 scl::field<&ProjectConf::authors, "authors">>;
 
-  using jayson_fields =
-    std::tuple<jayson::obj_field<"version", &ProjectConf::version>,
-               jayson::obj_field<"name", &ProjectConf::name>,
-               jayson::obj_field<"description", &ProjectConf::description>,
-               jayson::obj_field<"authors", &ProjectConf::authors>>;
+  using jayson_fields
+    = std::tuple<jayson::obj_field<"version", &ProjectConf::version>,
+                 jayson::obj_field<"name", &ProjectConf::name>,
+                 jayson::obj_field<"description", &ProjectConf::description>,
+                 jayson::obj_field<"authors", &ProjectConf::authors>>;
 };
 
 /* for target/release-dependent build flags/sources, see confs.cc */
-struct CXXConf
-{
-  std::optional<int> std;
+struct CXXConf {
+  std::optional<int>       std;
   std::vector<std::string> flags;
   std::vector<std::string> sources;
 
@@ -85,9 +82,8 @@ struct CXXConf
                                 scl::field<&CXXConf::sources, "sources">>;
 };
 
-struct CConf
-{
-  std::optional<int> std;
+struct CConf {
+  std::optional<int>       std;
   std::vector<std::string> flags;
   std::vector<std::string> sources;
 
@@ -96,25 +92,22 @@ struct CConf
                                 scl::field<&CConf::sources, "sources">>;
 };
 
-struct HooksConf
-{
+struct HooksConf {
   std::vector<std::string> once;
   std::vector<std::string> always;
 
-  using scl_fields =
-    std::tuple<scl::field<&HooksConf::once, "once", false>,
-               scl::field<&HooksConf::always, "always", false>>;
+  using scl_fields
+    = std::tuple<scl::field<&HooksConf::once, "once", false>,
+                 scl::field<&HooksConf::always, "always", false>>;
 };
 
-struct ToolProfile
-{
+struct ToolProfile {
   std::string tool_profile_name;
-  using scl_fields =
-    std::tuple<scl::field<&ToolProfile::tool_profile_name, "name">>;
+  using scl_fields
+    = std::tuple<scl::field<&ToolProfile::tool_profile_name, "name">>;
 };
 
-struct DependenciesConf
-{
+struct DependenciesConf {
   std::vector<std::string> internal;
   std::vector<std::string> external;
   std::vector<std::string> system_libraries;
@@ -125,17 +118,16 @@ struct DependenciesConf
     scl::field<&DependenciesConf::system_libraries, "system", false>>;
 };
 
-ToolProfile
-get_default_tool_profile();
+auto
+get_default_tool_profile() -> ToolProfile;
 
-struct ConfigurationFile
-{
-  MetaConf meta;
+struct ConfigurationFile {
+  MetaConf    meta;
   ProjectConf project;
   ToolProfile tools = get_default_tool_profile();
 
   // modified with build profile
-  CConf c;
+  CConf   c;
   CXXConf cxx;
 
   DependenciesConf depends;

@@ -1,9 +1,9 @@
 [hewg]
-version = "0.4.0-alpha"
+version = "0.4.0-beta"
 type = "executable"
 
 [project]
-version = "0.4.0-alpha"
+version = "0.4.0-beta"
 org = "crow"
 name = "hewg"
 description = "compiler build system and management software"
@@ -59,3 +59,12 @@ sources =
     "bootstrap_version.c"
 }
 
+[profile.debug]
+level = 0
+
+[profile.small]
+level = 2
+small = true
+
+[profile.release]
+level = 2

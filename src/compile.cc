@@ -1,17 +1,6 @@
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <crow.jayson/jayson.hh>
-#include <filesystem>
-#include <format>
-#include <future>
-#include <iterator>
-#include <memory>
-#include <optional>
-#include <print>
-#include <span>
-
 #include "analysis.hh"
+#include "app.hh"
+#include "build.hh"
 #include "common.hh"
 #include "compile.hh"
 #include "confs.hh"
@@ -20,10 +9,22 @@
 #include "semver.hh"
 #include "thread_pool.hh"
 
-std::vector<std::string>
-generate_c_cxx_file_flags(std::filesystem::path const filepath,
-                          std::filesystem::path const depfile,
-                          std::filesystem::path const object_file)
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <crow.jayson/jayson.hh>
+#include <filesystem>
+#include <format>
+#include <future>
+#include <memory>
+#include <optional>
+#include <span>
+
+auto
+generate_c_cxx_file_flags(std::filesystem::path const& filepath,
+                          std::filesystem::path const& depfile,
+                          std::filesystem::path const& object_file)
+  -> std::vector<std::string>
 {
   using std::filesystem::relative;
 
@@ -37,11 +38,11 @@ generate_c_cxx_file_flags(std::filesystem::path const filepath,
   };
 };
 
-constexpr auto generate_common_flags =
-  [](PackageIdentifier const& this_ident,
-     bool const is_release,
-     bool const PIC) static -> std::vector<std::string> {
-  static const std::vector<std::string> common_flags = {
+constexpr auto generate_common_flags
+  = [](AppContext const&        ctx,
+       PackageIdentifier const& ident,
+       bool                     PIC) static -> std::vector<std::string> {
+  static std::vector<std::string> const common_flags = {
     "-c",
     "-Iprivate",
     "-Iinclude",
@@ -50,86 +51,72 @@ constexpr auto generate_common_flags =
 
   auto copy = common_flags;
 
-  if (is_release)
-    copy = copy + std::vector<std::string>{ "-O2" };
+  if (ctx.build_options().release)
+    copy = copy + std::vector<std::string>{ "-O3", "-DNDEBUG" };
   else
-    copy = copy + std::vector<std::string>{ "-O0", "-g" };
+    copy = copy + std::vector<std::string>{ "-Og", "-g" };
 
   if (PIC)
     copy = copy + std::vector<std::string>{ "-fPIC" };
 
-  copy = copy + std::vector<std::string>{ std::format("-DHEWG_ORG={}",
-                                                      this_ident.org()) };
+  copy = copy
+       + std::vector<std::string>{ std::format("-DHEWG_ORG={}", ident.org()) };
 
-  copy = copy + std::vector<std::string>{ std::format("-DHEWG_NAME={}",
-                                                      this_ident.name()) };
+  copy
+    = copy
+    + std::vector<std::string>{ std::format("-DHEWG_NAME={}", ident.name()) };
 
   return copy;
 };
 
-std::vector<std::string>
-generate_c_flags(std::span<std::string const> user_flags,
-                 std::span<std::filesystem::path const> include_dirs,
-                 int const std,
-                 PackageIdentifier const& ident,
-                 bool const is_release,
-                 bool const PIC)
+auto
+generate_c_flags(AppContext const&                  ctx,
+                 PackageIdentifier const&           ident,
+                 bool                               PIC,
+                 std::set<PackageIdentifier> const& include_dirs)
+  -> std::vector<std::string>
 {
-  auto out = generate_common_flags(ident, is_release, PIC) +
-             std::vector(user_flags.begin(), user_flags.end()) +
-             std::vector{ std::format("-std={}", get_c_standard_string(std)) };
+  auto out
+    = generate_common_flags(ctx, ident, PIC) + ctx.config().c.flags
+    + std::vector{ std::format(
+      "-std={}", get_c_standard_string(ctx.config().c.std.value_or(17))) };
 
-  for (auto const& dir : include_dirs)
-    out.push_back(std::format("-I{}", std::filesystem::absolute(dir).string()));
+  for (auto const& dir : include_dirs) {
+    out.push_back(std::format(
+      "-I{}",
+      std::filesystem::absolute(get_packages_include_directory(dir)).string()));
+  }
 
   return out;
 };
 
-std::vector<std::string>
-generate_cxx_flags(std::span<std::string const> user_flags,
-                   std::span<std::filesystem::path const> include_dirs,
-                   int const std,
-                   PackageIdentifier const& ident,
-                   bool const is_release,
-                   bool const PIC)
+auto
+generate_cxx_flags(AppContext const&                  ctx,
+                   PackageIdentifier const&           ident,
+                   bool                               PIC,
+                   std::set<PackageIdentifier> const& include_dirs)
+  -> std::vector<std::string>
 {
-  auto out =
-    generate_common_flags(ident, is_release, PIC) +
-    std::vector(user_flags.begin(), user_flags.end()) +
-    std::vector{ std::format("-std={}", get_cxx_standard_string(std)) };
+  auto out
+    = generate_common_flags(ctx, ident, PIC) + ctx.config().cxx.flags
+    + std::vector{ std::format(
+      "-std={}", get_cxx_standard_string(ctx.config().cxx.std.value_or(23))) };
 
-  for (auto const& dir : include_dirs)
-    out.push_back(std::format("-I{}", std::filesystem::absolute(dir).string()));
+  for (auto const& dir : include_dirs) {
+    out.push_back(std::format(
+      "-I{}",
+      std::filesystem::absolute(get_packages_include_directory(dir)).string()));
+  }
 
   return out;
 };
 
-struct format_data
-{
-  int total_num;
-  int num_digits;
+struct format_data {
+  int total_num{};
+  int num_digits{};
 
   std::atomic<int> counter;
 };
-
-static void
-print_status(format_data& formatting,
-             std::string_view const language,
-             std::filesystem::path const file)
-{
-  auto const pct = formatting.counter / (float)formatting.total_num * 0.5 + 0.4;
-
-  threadsafe_print(
-    std::format("({}{:{}}\x1b[39m/\x1b[38;2;230;230;230m{:{}}\x1b[39m) "
-                "[\x1b[2m{}\x1b[22m] {}\n",
-                greyscale_terminal_colorize(pct),
-                formatting.counter++,
-                formatting.num_digits,
-                formatting.total_num,
-                formatting.num_digits,
-                language,
-                file.string()));
-}
 
 // static void
 // write_error_file(std::filesystem::path src_file, std::string_view what)
@@ -151,77 +138,94 @@ print_status(format_data& formatting,
 //   run_command("sed", sed_args);
 // }
 
-// will set successful_compile to false
-// if the task failed
-static std::future<std::optional<std::string>>
-start_cxx_compile_task(ThreadPool& thread_pool,
-                       TargetFile const& tool_file,
-                       CXXSourceRelatives const& relatives,
-                       CXXSourceRelatives::File const& file,
-                       std::vector<std::string> common_flags,
-                       std::shared_ptr<format_data> formatting)
+namespace
 {
-  return thread_pool.add_job(
-    [common_flags, formatting, &tool_file, &thread_pool, &relatives, &file]()
-      -> std::optional<std::string> {
-      print_status(*formatting, "CXX", file.source);
+void
+print_status(format_data&                 formatting,
+             std::string_view const       language,
+             std::filesystem::path const& file)
+{
+  auto const pct
+    = (0.5 * formatting.counter / (float) formatting.total_num) + 0.4;
 
-      auto const [exit_code, what] = run_command(
-        tool_file.cxx,
-        common_flags +
-          generate_c_cxx_file_flags(relatives.source_directory() / file.source,
+  threadsafe_print(
+    std::format("({}{:{}}\x1b[39m/\x1b[38;2;230;230;230m{:{}}\x1b[39m) "
+                "[\x1b[2m{}\x1b[22m] {}\n",
+                greyscale_terminal_colorize(pct),
+                formatting.counter++,
+                formatting.num_digits,
+                formatting.total_num,
+                formatting.num_digits,
+                language,
+                file.string()));
+}
+
+auto
+start_cxx_compile_task(AppContext const&                   ctx,
+                       BuildContext const&                 build_ctx,
+                       CXXSourceRelatives const&           relatives,
+                       CXXSourceRelatives::File const&     file,
+                       std::shared_ptr<format_data> const& formatting)
+  -> std::future<std::optional<std::string>>
+{
+  return ctx.threads().add_job([formatting, &ctx, &build_ctx, &relatives, &file]
+                               -> std::optional<std::string> {
+    print_status(*formatting, "CXX", file.source);
+
+    auto const [exit_code, what] = run_command(
+      build_ctx.target().cxx,
+      build_ctx.cxxflags()
+        + generate_c_cxx_file_flags(relatives.source_directory() / file.source,
                                     relatives.cache_directory() / file.depends,
                                     relatives.cache_directory() / file.object));
 
-      if (exit_code != 0) {
-        thread_pool.drain();
-        return file.source.string();
-        // write_error_file(source_filepath, what);
-      }
+    if (exit_code != 0) {
+      ctx.threads().drain();
+      return file.source.string();
+      // write_error_file(source_filepath, what);
+    }
 
-      return std::nullopt;
-    });
+    return std::nullopt;
+  });
 }
 
-static std::future<std::optional<std::string>>
-start_c_compile_task(ThreadPool& thread_pool,
-                     TargetFile const& tool_file,
-                     CSourceRelatives const& relatives,
-                     CSourceRelatives::File const& file,
-                     std::vector<std::string> common_flags,
-                     std::shared_ptr<format_data> formatting)
+auto
+start_c_compile_task(AppContext const&                   ctx,
+                     BuildContext const&                 build_ctx,
+                     CSourceRelatives const&             relatives,
+                     CSourceRelatives::File const&       file,
+                     std::shared_ptr<format_data> const& formatting)
+  -> std::future<std::optional<std::string>>
 {
-  return thread_pool.add_job(
-    [&relatives, &file, common_flags, formatting, &tool_file, &thread_pool]()
-      -> std::optional<std::string> {
-      print_status(*formatting, "C", file.source);
+  return ctx.threads().add_job([&relatives, &file, &ctx, &build_ctx, formatting]
+                               -> std::optional<std::string> {
+    print_status(*formatting, "C", file.source);
 
-      auto const [exit_code, what] = run_command(
-        tool_file.cc,
-        common_flags +
-          generate_c_cxx_file_flags(relatives.source_directory() / file.source,
+    auto const [exit_code, what] = run_command(
+      build_ctx.target().cc,
+      build_ctx.cflags()
+        + generate_c_cxx_file_flags(relatives.source_directory() / file.source,
                                     relatives.cache_directory() / file.depends,
                                     relatives.cache_directory() / file.object));
 
-      if (exit_code != 0) {
-        thread_pool.drain();
-        return file.source.string();
-        // write_error_file(source_filepath, what);
-      }
+    if (exit_code != 0) {
+      ctx.threads().drain();
+      return file.source.string();
+      // write_error_file(source_filepath, what);
+    }
 
-      return std::nullopt;
-    });
+    return std::nullopt;
+  });
 }
-
-static std::string
-emit_symcache_contents(PackageType const this_package_type,
-                       PackageIdentifier const& ident)
+auto
+emit_symcache_contents(PackageType const        this_package_type,
+                       PackageIdentifier const& ident) -> std::string
 {
   auto const& version = ident.version();
 
   std::string out;
 
-  out += std::format("int __hewg_{}_{}_version[3] = {{ {}, {}, {} }};",
+  out += std::format("int _hewg_{}_{}_version[3] = {{ {}, {}, {} }};",
                      ident.org(),
                      ident.name(),
                      version.major(),
@@ -230,44 +234,47 @@ emit_symcache_contents(PackageType const this_package_type,
 
   out += "\n";
 
-  if (auto const pre = version.prerelease())
-    out += std::format("char const* __hewg_{}_{}_prerelease = \"{}\";",
+  if (auto const pre = version.prerelease()) {
+    out += std::format("char const* _hewg_{}_{}_prerelease = \"{}\";",
                        ident.org(),
                        ident.name(),
                        *pre);
-  else
-    out += std::format("char const* __hewg_{}_{}_prerelease = (char const*)0;",
+  } else {
+    out += std::format("char const* _hewg_{}_{}_prerelease = (char const*)0;",
                        ident.org(),
                        ident.name());
+  }
 
   out += "\n";
 
-  if (auto const meta = version.metadata())
-    out += std::format("char const* __hewg_{}_{}_metadata = \"{}\";",
+  if (auto const meta = version.metadata()) {
+    out += std::format("char const* _hewg_{}_{}_metadata = \"{}\";",
                        ident.org(),
                        ident.name(),
                        *meta);
-  else
-    out += std::format("char const* __hewg_{}_{}_metadata = (char const*)0;",
+  } else {
+    out += std::format("char const* _hewg_{}_{}_metadata = (char const*)0;",
                        ident.org(),
                        ident.name());
+  }
 
   out += "\n";
 
-  out += std::format("char const* __hewg_{}_{}_build_target_triplet[3] = {{ "
-                     "\"{}\", \"{}\", \"{}\" }};",
-                     ident.org(),
-                     ident.name(),
-                     ident.target().architecture(),
-                     ident.target().os(),
-                     ident.target().vendor());
+  out += std::format(
+    "char const* _hewg_{}_{}_build_target_triplet[3] = {{ "
+    "\"{}\", \"{}\", \"{}\" }};",
+    ident.org(),
+    ident.name(),
+    ident.target().architecture(),
+    ident.target().os(),
+    ident.target().vendor());
 
   out += "\n";
 
   if (this_package_type == PackageType::Executable) {
     // TODO: hewg bundling, later
     // this is just set up in advance so i can eventually set up bundling
-    out += std::format("int const __hewg_bundled = 1;");
+    out += std::format("int const _hewg_bundled = 1;");
     out += "\n";
   }
 
@@ -275,7 +282,7 @@ emit_symcache_contents(PackageType const this_package_type,
 
   auto const now = duration_cast<seconds>(utc_clock::now().time_since_epoch());
 
-  out += std::format("long __hewg_{}_{}_build_date = {};",
+  out += std::format("long _hewg_{}_{}_build_date = {};",
                      ident.org(),
                      ident.name(),
                      now.count());
@@ -284,29 +291,28 @@ emit_symcache_contents(PackageType const this_package_type,
 
   return out;
 }
+}
 
-std::filesystem::path
-compile_hewgsym(ConfigurationFile const& conf,
-                TargetFile const& tools,
-                PackageIdentifier const& this_ident,
-                bool PIC)
+auto
+compile_hewgsym(AppContext const& ctx, BuildContext const& build_ctx)
+  -> std::filesystem::path
 {
-  auto const object_file_name =
-    PIC ? hewg_builtinsym_obj_pic_path : hewg_builtinsym_obj_path;
+  auto const object_file_name
+    = build_ctx.pic() ? hewg_builtinsym_obj_pic_path : hewg_builtinsym_obj_path;
 
   std::ofstream(hewg_builtinsym_src_path)
-    << emit_symcache_contents(conf.meta.type, this_ident);
+    << emit_symcache_contents(ctx.config().meta.type, build_ctx.ident());
 
   std::vector<std::string> args;
-  args.push_back("-O2");
-  args.push_back("-c");
+  args.emplace_back("-O2");
+  args.emplace_back("-c");
   args.push_back(hewg_builtinsym_src_path);
-  args.push_back("-o");
+  args.emplace_back("-o");
   args.push_back(object_file_name);
-  if (PIC)
-    args.push_back("-fPIC");
+  if (build_ctx.pic())
+    args.emplace_back("-fPIC");
 
-  run_command(tools.cc, args);
+  run_command(build_ctx.target().cc, args);
 
   return object_file_name;
 }
@@ -328,11 +334,11 @@ compile_hewgsym(ConfigurationFile const& conf,
 // starts compilation for cxx
 // without blocking
 // make sure you synchronize the threads after this!
-std::vector<std::future<std::optional<std::string>>>
-compile_cxx(ThreadPool& threads,
-            std::span<std::string const> flags,
-            CXXSourceRelatives const& src,
-            TargetFile const& tools)
+auto
+compile_cxx(AppContext const&         ctx,
+            BuildContext const&       build_ctx,
+            CXXSourceRelatives const& src)
+  -> std::vector<std::future<std::optional<std::string>>>
 {
   {
     for (auto const& path : src.files())
@@ -344,40 +350,36 @@ compile_cxx(ThreadPool& threads,
 
   {
     std::string cxx_flags_fmt;
-    std::ranges::for_each(flags, [&](std::string_view in) {
+    std::ranges::for_each(build_ctx.cxxflags(), [&](std::string_view in) {
       cxx_flags_fmt += in, cxx_flags_fmt += ' ';
     });
 
     threadsafe_print_verbose(std::format("CXX flags: {}", cxx_flags_fmt));
   }
 
-  auto const num = cxx_rebuilds.size();
-  auto const digits = std::ceil(std::log10(num));
+  auto const                   num    = cxx_rebuilds.size();
+  auto const                   digits = std::ceil(std::log10(num));
   std::shared_ptr<format_data> formatting(new format_data);
-  formatting->counter = 1;
-  formatting->total_num = num;
-  formatting->num_digits = digits;
+  formatting->counter    = 1;
+  formatting->total_num  = (int) num;
+  formatting->num_digits = (int) digits;
 
   std::vector<std::future<std::optional<std::string>>> awaits;
 
+  awaits.reserve(cxx_rebuilds.size());
   for (auto const& rebuild : cxx_rebuilds) {
-    awaits.push_back(start_cxx_compile_task(
-      threads,
-      tools,
-      src,
-      rebuild.get(),
-      std::vector<std::string>{ flags.begin(), flags.end() },
-      formatting));
+    awaits.push_back(
+      start_cxx_compile_task(ctx, build_ctx, src, rebuild.get(), formatting));
   }
 
   return awaits;
 }
 
-std::vector<std::future<std::optional<std::string>>>
-compile_c(ThreadPool& threads,
-          std::span<std::string const> flags,
-          CSourceRelatives const& src,
-          TargetFile const& tools)
+auto
+compile_c(AppContext const&       ctx,
+          BuildContext const&     build_ctx,
+          CSourceRelatives const& src)
+  -> std::vector<std::future<std::optional<std::string>>>
 {
   {
     for (auto const& path : src.files())
@@ -389,30 +391,26 @@ compile_c(ThreadPool& threads,
 
   {
     std::string c_flags_fmt;
-    std::ranges::for_each(flags, [&](std::string_view in) {
+    std::ranges::for_each(build_ctx.cflags(), [&](std::string_view in) {
       c_flags_fmt += in, c_flags_fmt += ' ';
     });
 
     threadsafe_print_verbose(std::format("C flags: {}", c_flags_fmt));
   }
 
-  auto const num = c_rebuilds.size();
-  auto const digits = std::ceil(std::log10(num));
+  auto const                   num    = c_rebuilds.size();
+  auto const                   digits = std::ceil(std::log10(num));
   std::shared_ptr<format_data> formatting(new format_data);
-  formatting->counter = 1;
-  formatting->total_num = num;
-  formatting->num_digits = digits;
+  formatting->counter    = 1;
+  formatting->total_num  = (int) num;
+  formatting->num_digits = (int) digits;
 
   std::vector<std::future<std::optional<std::string>>> awaits;
 
+  awaits.reserve(c_rebuilds.size());
   for (auto const& rebuild : c_rebuilds) {
-    awaits.push_back(start_c_compile_task(
-      threads,
-      tools,
-      src,
-      rebuild,
-      std::vector<std::string>{ flags.begin(), flags.end() },
-      formatting));
+    awaits.push_back(
+      start_c_compile_task(ctx, build_ctx, src, rebuild, formatting));
   }
 
   return awaits;

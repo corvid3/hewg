@@ -1,16 +1,19 @@
-#include <filesystem>
-#include <fstream>
-#include <print>
-#include <regex>
-#include <string_view>
-
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
 #include "init.hh"
 #include "packages.hh"
 
-auto static const scl_template = R"([hewg]
+#include <filesystem>
+#include <fstream>
+#include <print>
+#include <regex>
+#include <string_view>
+
+namespace
+{
+
+auto const scl_template = R"([hewg]
 version = "%HEWG-VERSION%"
 type = "%PROJECT-TYPE%"
 
@@ -39,20 +42,20 @@ sources = { }
 [hooks.postbuild]
 )";
 
-auto static const gitignore_template = R"(
+auto const gitignore_template = R"(
 .hcache
 .cache/
 target/
 compile_commands.json
 )";
 
-std::regex static const hewg_version_regex("%HEWG-VERSION%");
-std::regex static const project_type_regex("%PROJECT-TYPE%");
-std::regex static const org_regex("%ORG%");
-std::regex static const name_regex("%NAME%");
+std::regex const hewg_version_regex("%HEWG-VERSION%");
+std::regex const project_type_regex("%PROJECT-TYPE%");
+std::regex const org_regex("%ORG%");
+std::regex const name_regex("%NAME%");
 
-static void
-common_init(std::filesystem::path install_directory)
+void
+common_init(std::filesystem::path const& install_directory)
 {
   std::println("{}", 2);
 
@@ -63,10 +66,10 @@ common_init(std::filesystem::path install_directory)
   std::filesystem::create_directory(install_directory / "hooks");
 }
 
-static std::string
+auto
 create_scl_file(std::string_view org,
                 std::string_view name,
-                std::string_view type)
+                std::string_view type) -> std::string
 {
   // wow the stdlib regex blows
   std::string str;
@@ -79,8 +82,8 @@ create_scl_file(std::string_view org,
   return str;
 }
 
-static void
-check_or_create_directory(std::filesystem::path directory)
+void
+check_or_create_directory(std::filesystem::path const& directory)
 {
   if (not std::filesystem::exists(directory)) {
     std::filesystem::create_directory(directory);
@@ -94,24 +97,26 @@ check_or_create_directory(std::filesystem::path directory)
   }
 }
 
-void
-init(InitOptions const& options, std::span<std::string const> bares)
-{
-  auto const this_dir = std::filesystem::current_path();
+}
 
-  if (options.help) {
+void
+init(AppContext const& ctx)
+{
+  if (ctx.init_options().help) {
     terse::print_usage<InitOptions>();
     return;
   }
 
-  if (bares.size() != 2)
-    throw std::runtime_error("init requires two arguments, the project type "
-                             "followed by the project name.");
+  if (ctx.bares().size() != 2) {
+    throw std::runtime_error(
+      "init requires two arguments, the project type "
+      "followed by the project name.");
+  }
 
-  auto const project_type = project_type_from_string(bares[0]);
-  auto const project_ident = bares[1];
+  auto const  project_type  = project_type_from_string(ctx.bares()[0]);
+  auto const& project_ident = ctx.bares()[1];
 
-  auto const project_org = project_ident.substr(0, project_ident.find('.'));
+  auto const project_org  = project_ident.substr(0, project_ident.find('.'));
   auto const project_name = project_ident.substr(project_ident.find('.') + 1);
 
   if (project_org.empty() or project_name.empty())
@@ -125,15 +130,18 @@ init(InitOptions const& options, std::span<std::string const> bares)
         project_name.begin(), project_name.end(), regexes::name))
     throw std::runtime_error("project name provided is not valid");
 
-  if (not project_type)
+  if (not project_type) {
     throw std::runtime_error(
       "project type provided is not valid; it must be one of <executable>, "
       "<library>, <dynlib>, <headers>");
+  }
 
-  auto const install_directory =
-    options.directory
-      .transform([](auto const in) { return std::filesystem::path(in); })
-      .value_or(std::filesystem::current_path());
+  auto const install_directory = ctx.init_options()
+                                   .directory
+                                   .transform([](auto const& in) {
+                                     return std::filesystem::path(in);
+                                   })
+                                   .value_or(std::filesystem::current_path());
 
   threadsafe_print(
     std::format("initializing project in <{}>...", install_directory.string()));
@@ -143,26 +151,34 @@ init(InitOptions const& options, std::span<std::string const> bares)
   common_init(install_directory);
 
   switch (*project_type) {
-    case PackageType::Executable: {
-      auto const file =
-        create_scl_file(project_org, project_name, "executable");
+  case PackageType::Executable:
+    {
+      auto const file
+        = create_scl_file(project_org, project_name, "executable");
       std::ofstream(install_directory / "hewg.scl") << file;
-    } break;
+    }
+    break;
 
-    case PackageType::StaticLibrary: {
+  case PackageType::StaticLibrary:
+    {
       auto const file = create_scl_file(project_org, project_name, "library");
       std::ofstream(install_directory / "hewg.scl") << file;
-    } break;
+    }
+    break;
 
-    case PackageType::SharedLibrary: {
+  case PackageType::SharedLibrary:
+    {
       auto const file = create_scl_file(project_org, project_name, "dynlib");
       std::ofstream(install_directory / "hewg.scl") << file;
-    } break;
+    }
+    break;
 
-    case PackageType::Headers: {
+  case PackageType::Headers:
+    {
       auto const file = create_scl_file(project_org, project_name, "headers");
       std::ofstream(install_directory / "hewg.scl") << file;
-    } break;
+    }
+    break;
   }
 
   std::ofstream(install_directory / ".gitignore") << gitignore_template;
