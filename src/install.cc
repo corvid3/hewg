@@ -27,8 +27,8 @@
 */
 
 // returns the path to the user hewg directory
-static std::filesystem::path
-ensure_user_hewg_directory()
+auto
+ensure_user_hewg_directory() -> std::filesystem::path
 {
   create_directory_checked(user_hewg_directory);
   create_directory_checked(hewg_packages_directory);

@@ -90,7 +90,7 @@ link_executable(AppContext const&                      ctx,
 
   // we also want to strip the executable if we're
   // creating a release executable
-  if (ctx.build_options().release) {
+  if (ctx.build_options().release && not ctx.build_options().force_debug) {
     run_command("strip", "-s", output_filepath.string());
   }
 }

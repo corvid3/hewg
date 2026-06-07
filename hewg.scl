@@ -15,13 +15,13 @@ internal = {
     "=crow.jayson-0.1.0"
     "=crow.lexible-0.1.0"
     "=crow.datalogpp-0.0.1"
-    "=crow.terse-0.1.0"
+    "=crow.terse-0.2.0"
 }
 external = { }
 system = { "stdc++exp" }
 
 [cxx]
-flags = { "-Wextra" "-Werror" }
+flags = { "-Wextra" "-Werror" "-g" }
 std = 23
 sources = 
 {

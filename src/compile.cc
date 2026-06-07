@@ -51,7 +51,7 @@ constexpr auto generate_common_flags
 
   auto copy = common_flags;
 
-  if (ctx.build_options().release)
+  if (ctx.build_options().release && not ctx.build_options().force_debug)
     copy = copy + std::vector<std::string>{ "-O3", "-DNDEBUG" };
   else
     copy = copy + std::vector<std::string>{ "-Og", "-g" };

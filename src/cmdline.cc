@@ -1,9 +1,11 @@
-#include <crow.terse/terse.hh>
-
 #include "cmdline.hh"
 
-decltype(terse::execute<ToplevelOptions>({}, {}))
+#include <cassert>
+#include <crow.terse/terse.hh>
+
+auto
 parse_cmdline(int argc, char** argv)
+  -> decltype(terse::execute<ToplevelOptions>({}, {}))
 {
   return terse::execute<ToplevelOptions>(argc, argv);
 }

@@ -6,6 +6,8 @@
 #include "target.hh"
 #include "thread_pool.hh"
 
+#include <optional>
+
 /* contains global information about the project invoked,
  * as well as threading and other OS specific subsystems */
 struct AppContext {
@@ -52,7 +54,7 @@ public:
   auto
   config() const -> ConfigurationFile const&
   {
-    return m_config;
+    return *m_config;
   }
 
   auto
@@ -62,10 +64,10 @@ public:
   }
 
 private:
-  ToplevelOptions    m_options;
-  mutable ThreadPool m_threads;
-  TargetTriplet      m_triplet;
-  ConfigurationFile  m_config;
+  ToplevelOptions                  m_options;
+  mutable ThreadPool               m_threads;
+  TargetTriplet                    m_triplet;
+  std::optional<ConfigurationFile> m_config;
 };
 
 inline AppContext::AppContext(int argc, char** argv)

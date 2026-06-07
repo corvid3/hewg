@@ -62,9 +62,11 @@ auto
 get_config_file(
   ToplevelOptions const&                                     options,
   std::optional<std::reference_wrapper<TargetTriplet const>> target_opt,
-  std::filesystem::path path) -> ConfigurationFile
+  std::filesystem::path path) -> std::optional<ConfigurationFile>
 {
-  std::string config_filedata = read_file(std::move(path));
+  if (not std::filesystem::exists(path))
+    return std::nullopt;
+  std::string config_filedata = read_file(path);
   scl::file   file(config_filedata);
 
   ConfigurationFile conf;

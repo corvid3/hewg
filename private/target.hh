@@ -140,7 +140,7 @@ private:
 auto
 get_config_file(ToplevelOptions const&,
                 std::optional<std::reference_wrapper<TargetTriplet const>>,
-                std::filesystem::path path) -> ConfigurationFile;
+                std::filesystem::path path) -> std::optional<ConfigurationFile>;
 
 #ifdef __linux__
 /* by default, in linux builds, prefer the gnu toolchain. */

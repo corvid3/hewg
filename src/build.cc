@@ -155,6 +155,7 @@ build_shared_library(AppContext const& ctx, PackageContext const& pkg)
 extern void
 build(AppContext const& ctx)
 {
+  volatile auto const m = ctx.build_options();
   trigger_prebuild_hooks(ctx.config());
 
   std::vector<std::filesystem::path> object_files;
@@ -175,7 +176,7 @@ build(AppContext const& ctx)
     // header only projects
     // have nothing to compile,
     // just skip
-  case PackageType::Headers: return;
+  case PackageType::Headers: break;
   }
 
   triggers_postbuild_hooks(ctx.config());
