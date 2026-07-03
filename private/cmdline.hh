@@ -27,7 +27,7 @@ struct InitOptions {
   constexpr static auto short_description = "creates a basic hewg project";
   constexpr static auto description
     = "Initializes a basic hewg project in the current directory. Project type "
-      "is one of <executable>, <library>, <shared>, or <headers>. A name must "
+      "is one of <executable>, <library>, <dynlib>, or <headers>. A name must "
       "be "
       "provided.";
 

@@ -1,3 +1,4 @@
+#include "app.hh"
 #include "cmdline.hh"
 #include "common.hh"
 #include "confs.hh"
@@ -81,7 +82,8 @@ create_scl_file(std::string_view org,
 }
 
 void
-check_or_create_directory(std::filesystem::path const& directory)
+check_or_create_directory(AppContext const&            ctx,
+                          std::filesystem::path const& directory)
 {
   if (not std::filesystem::exists(directory)) {
     std::filesystem::create_directory(directory);
@@ -89,7 +91,7 @@ check_or_create_directory(std::filesystem::path const& directory)
     throw std::runtime_error(std::format(
       "provided path <{}> is not a directory!", directory.string()));
   } else {
-    if (not std::filesystem::is_empty(directory))
+    if (not ctx.options().force and not std::filesystem::is_empty(directory))
       throw std::runtime_error(std::format(
         "provided directory <{}> is not empty!", directory.string()));
   }
@@ -144,8 +146,7 @@ init(AppContext const& ctx)
   threadsafe_print(
     std::format("initializing project in <{}>...", install_directory.string()));
   do_terminal_countdown(3);
-
-  check_or_create_directory(install_directory);
+  check_or_create_directory(ctx, install_directory);
   common_init(install_directory);
 
   switch (*project_type) {
