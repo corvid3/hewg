@@ -61,3 +61,7 @@ fi
 )
 
 make bootstrap
+
+mkdir ~/.hewg/targets
+cp ./x86-linux-gnu ~/.hewg/targets
+cp ./x86-linux-clang ~/.hewg/targets

@@ -1,0 +1,7 @@
+[tools]
+cxx = "x86_64-pc-linux-gnu-clang++"
+cc = "x86_64-pc-linux-gnu-clang"
+ld = "mold"
+ar = "ar"
+
+sys_include_dirs = { "/usr/include" "/usr/local/include" }

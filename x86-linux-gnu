@@ -1,0 +1,38 @@
+[tools]
+cxx = "x86_64-pc-linux-gnu-g++-15"
+cc  = "x86_64-pc-linux-gnu-gcc-15"
+ld  = "mold"
+ar  = "ar"
+
+[directories]
+include_dirs = { "/usr/include" "/usr/local/include" }
+lib_dirs = { "/usr/lib" "/usr/local/lib" }
+
+# everything past this point is experimental stuff, mostly unimplemented
+# it's included just for posterity (and brainstorming)
+
+[flags.lto]
+c   = { "-flto" }
+cxx = { "-flto" }
+ld  = { "-flto" }
+
+[debug]
+lto = false
+c   = { "-Og" "-g" }
+cxx = { "-Og" "-g" }
+
+[release]
+lto = true
+c   = { "-O3" "-s" "-ffast-math" }
+cxx = { "-O3" "-s" "-ffast-math" }
+
+[small]
+lto = true
+c   = {
+	"-Os"
+	"-s"
+	"-fno-unwind-tables"
+	"-fno-stack-protector"
+	"-fomit-frame-pointer"
+	"-fno-unroll-loops"
+	"-fmerge-all-constants" }
