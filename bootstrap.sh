@@ -4,6 +4,7 @@ if [ ! -d ./bootstrap ]; then
   mkdir bootstrap
 fi
 
+! echo "starting bootstrap of dependencies"
 (
   cd bootstrap  
 
@@ -60,8 +61,15 @@ fi
   )
 )
 
+! echo "bootstrap of dependencies finished, starting hewg bootstrap"
 make bootstrap
 
+! echo "setting up targetfiles"
 mkdir ~/.hewg/targets
 cp ./x86-linux-gnu ~/.hewg/targets
 cp ./x86-linux-clang ~/.hewg/targets
+
+! echo "now we actually run the hewg bootstrap"
+./bin/hewg build --install
+
+! echo "you may now use hewg. put ~/.hewg/bin into your $PATH or something."
